@@ -185,7 +185,6 @@
       type="file"
       accept="image/*"
       multiple
-      capture="environment"
       on:change={(e) => handleFiles(e.currentTarget)}
     />
     <span>＋ Add photos</span>

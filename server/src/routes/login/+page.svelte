@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { enhance } from '$app/forms';
   import type { ActionData, PageData } from './$types';
   export let data: PageData;
   export let form: ActionData;
+
+  let submitting = false;
 </script>
 
 <svelte:head><title>Photowall · Sign in</title></svelte:head>
@@ -14,7 +17,16 @@
     <p class="muted">Enter the party password.</p>
   {/if}
 
-  <form method="POST">
+  <form
+    method="POST"
+    use:enhance={() => {
+      submitting = true;
+      return async ({ update }) => {
+        await update();
+        submitting = false;
+      };
+    }}
+  >
     <input type="hidden" name="next" value={data.next} />
 
     {#if !data.hasToken}
@@ -46,7 +58,9 @@
       <p class="error">{form.error}</p>
     {/if}
 
-    <button type="submit">Continue</button>
+    <button type="submit" disabled={submitting}>
+      {submitting ? 'Signing in…' : 'Continue'}
+    </button>
   </form>
 </main>
 

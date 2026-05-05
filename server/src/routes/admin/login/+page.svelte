@@ -1,21 +1,35 @@
 <script lang="ts">
+  import { enhance } from '$app/forms';
   import type { ActionData, PageData } from './$types';
   export let data: PageData;
   export let form: ActionData;
+
+  let submitting = false;
 </script>
 
 <svelte:head><title>Photowall · Admin sign in</title></svelte:head>
 
 <main>
   <h1>Admin</h1>
-  <form method="POST">
+  <form
+    method="POST"
+    use:enhance={() => {
+      submitting = true;
+      return async ({ update }) => {
+        await update();
+        submitting = false;
+      };
+    }}
+  >
     <input type="hidden" name="next" value={data.next} />
     <label>
       <span>Admin password</span>
       <input type="password" name="password" autocomplete="current-password" required autofocus />
     </label>
     {#if form?.error}<p class="error">{form.error}</p>{/if}
-    <button type="submit">Sign in</button>
+    <button type="submit" disabled={submitting}>
+      {submitting ? 'Signing in…' : 'Sign in'}
+    </button>
   </form>
 </main>
 
