@@ -2,11 +2,9 @@ import { error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { hub } from '$lib/server/sse';
 
-export const GET: RequestHandler = async ({ url, locals, request }) => {
-  const isWall = url.searchParams.get('wall') === '1';
-  // Wall stream is unauthenticated (the TV doesn't have a keyboard).
-  // Everything else requires a session.
-  if (!isWall && !locals.session) throw error(401, 'Unauthorized');
+export const GET: RequestHandler = async ({ locals, request }) => {
+  // The wall is now session-gated too, so all SSE clients have a session cookie.
+  if (!locals.session) throw error(401, 'Unauthorized');
 
   const enc = new TextEncoder();
 

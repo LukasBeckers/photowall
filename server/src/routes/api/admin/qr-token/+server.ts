@@ -10,7 +10,7 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
   const label = typeof body.label === 'string' ? body.label.slice(0, 40) : 'entrance';
 
   const token = issueToken({ label });
-  const base = process.env.PUBLIC_BASE_URL ?? `${url.protocol}//${url.host}`;
+  const base = `${url.protocol}//${url.host}`;
   const fullUrl = `${base}/login?t=${token}`;
   const qr = renderQrSvg(fullUrl);
   return json({ token, url: fullUrl, qr });

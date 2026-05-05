@@ -27,7 +27,6 @@ services:
       start_period: 30s
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       JWT_SECRET: ${JWT_SECRET}
       QR_TOKEN_SECRET: ${QR_TOKEN_SECRET}
       PARTY_PASSWORD: ${PARTY_PASSWORD}

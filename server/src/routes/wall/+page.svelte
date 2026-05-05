@@ -5,77 +5,89 @@
   import { REACTION_EMOJI } from '$lib/emoji';
   import type { PhotoSummary } from '$lib/types';
 
-  type Cell = { key: number; photo: PhotoSummary } | null;
+  type Item = { key: number; photo: PhotoSummary; size: 1 | 2 };
 
-  const CELL_COUNT = 12;
-  const CYCLE_MS = 5000;
+  // Reaction-based tuning constants ("subtle" defaults).
+  const STICKY_PER_REACTION = 0.15; // P(stay) per reaction, capped
+  const STICKY_CAP = 0.7;
+  const PROMOTE_THRESHOLD = 3; // total reactions to be a 2x2 candidate
+  const PROMOTE_PROB = 0.3;
   const PULSE_MS = 800;
 
-  let cells: Cell[] = Array.from({ length: CELL_COUNT }, () => null);
-  let pool: PhotoSummary[] = [];
-  let pulses: Map<string, number> = new Map(); // photoId -> timestamp of last reaction change
-  let cellSeq = 0;
-  let cycleTimer: ReturnType<typeof setInterval> | null = null;
+  let items: Item[] = [];
+  let pulses: Map<string, number> = new Map();
+  let seq = 0;
   let es: EventSource | null = null;
+
   let displayUrl = '';
   let qrSvg = '';
+  let partyPassword = '';
+  let cellSize = 200;
 
-  function nextKey() {
-    return ++cellSeq;
+  let cols = 6;
+  let rows = 2;
+  $: capacity = cols * rows;
+
+  $: visible = (() => {
+    const out: Item[] = [];
+    let used = 0;
+    for (const it of items) {
+      const u = it.size === 2 ? 4 : 1;
+      if (used + u > capacity) break;
+      out.push(it);
+      used += u;
+    }
+    return out;
+  })();
+
+  function totalReactions(p: PhotoSummary): number {
+    let t = 0;
+    for (const v of Object.values(p.reactions ?? {})) t += v;
+    return t;
+  }
+  function stickiness(p: PhotoSummary): number {
+    return Math.min(STICKY_CAP, totalReactions(p) * STICKY_PER_REACTION);
   }
 
-  function addOrUpdatePoolPhoto(p: PhotoSummary, prepend = false) {
-    const idx = pool.findIndex((x) => x.id === p.id);
-    if (idx >= 0) pool[idx] = p;
-    else if (prepend) pool = [p, ...pool];
-    else pool = [...pool, p];
-  }
-
-  function withWallParam(url: string): string {
-    if (url.includes('wall=1')) return url;
-    return url + (url.includes('?') ? '&' : '?') + 'wall=1';
-  }
-  function tagForWall(p: PhotoSummary): PhotoSummary {
-    return {
-      ...p,
-      thumb: withWallParam(p.thumb),
-      wall: withWallParam(p.wall),
-      original: withWallParam(p.original)
-    };
-  }
-
-  function placeNew(p0: PhotoSummary) {
-    const photo = tagForWall(p0);
-    addOrUpdatePoolPhoto(photo, true);
-    // Prefer an empty cell, otherwise pick a random non-empty one.
-    let target = cells.findIndex((c) => c === null);
-    if (target < 0) target = Math.floor(Math.random() * CELL_COUNT);
-    cells[target] = { key: nextKey(), photo };
-    cells = cells;
-  }
-
-  function cycle() {
-    if (pool.length === 0) return;
-    // Find a cell to swap. Prefer cells whose photo is duplicated elsewhere or
-    // any random cell if pool is bigger than CELL_COUNT.
-    const target = Math.floor(Math.random() * CELL_COUNT);
-    const visibleIds = new Set(cells.map((c) => c?.photo.id).filter(Boolean));
-    const candidates = pool.filter((p) => !visibleIds.has(p.id));
-    const pick =
-      candidates.length > 0
-        ? candidates[Math.floor(Math.random() * candidates.length)]
-        : pool[Math.floor(Math.random() * pool.length)];
-    cells[target] = { key: nextKey(), photo: pick };
-    cells = cells;
+  function placeNew(photo: PhotoSummary) {
+    const arrival: Item = { photo, size: 1, key: ++seq };
+    let toPlace: Item | null = arrival;
+    const out: Item[] = [];
+    for (const cur of items) {
+      if (toPlace === null) {
+        out.push(cur);
+        continue;
+      }
+      if (Math.random() < stickiness(cur.photo)) {
+        // sticky: cur stays in place; new arrival keeps looking for a slot
+        out.push(cur);
+      } else {
+        // arrival takes this slot, current item gets bumped further down
+        out.push(toPlace);
+        toPlace = cur;
+      }
+    }
+    if (toPlace) out.push(toPlace);
+    // Cap to a reasonable max so memory doesn't grow forever.
+    items = out.slice(0, 200);
   }
 
   function applyReactionChange(photoId: string, counts: Record<string, number>) {
-    // Update pool
-    pool = pool.map((p) => (p.id === photoId ? { ...p, reactions: counts } : p));
-    // Update visible cells (without changing the key, so no re-animation)
-    cells = cells.map((c) =>
-      c && c.photo.id === photoId ? { ...c, photo: { ...c.photo, reactions: counts } } : c
-    );
+    let promoted = false;
+    items = items.map((it) => {
+      if (it.photo.id !== photoId) return it;
+      const newPhoto = { ...it.photo, reactions: counts };
+      let newSize = it.size;
+      if (
+        it.size === 1 &&
+        Object.values(counts).reduce((a, b) => a + b, 0) >= PROMOTE_THRESHOLD &&
+        Math.random() < PROMOTE_PROB
+      ) {
+        newSize = 2;
+        promoted = true;
+      }
+      return { ...it, photo: newPhoto, size: newSize };
+    });
     pulses.set(photoId, Date.now());
     pulses = pulses;
     setTimeout(() => {
@@ -88,30 +100,49 @@
   }
 
   function applyHidden(photoId: string) {
-    pool = pool.filter((p) => p.id !== photoId);
-    cells = cells.map((c) => (c && c.photo.id === photoId ? null : c));
+    items = items.filter((it) => it.photo.id !== photoId);
+  }
+
+  function bannerHeight(): number {
+    const el = document.querySelector('.banner') as HTMLElement | null;
+    return el ? el.offsetHeight : 140;
+  }
+
+  function recompute() {
+    const w = window.innerWidth;
+    const h = window.innerHeight - bannerHeight();
+    const c = Math.max(2, Math.floor((w - 12) / cellSize));
+    const rowH = (cellSize * 4) / 3;
+    const r = Math.max(1, Math.floor((h - 12) / rowH));
+    cols = c;
+    rows = r;
+    document.documentElement.style.setProperty('--cols', String(c));
+    document.documentElement.style.setProperty('--cell-size', `${cellSize}px`);
   }
 
   onMount(async () => {
     const initial = await fetch('/api/wall/initial').then((r) => r.json());
-    pool = initial.photos as PhotoSummary[];
+    const photos = (initial.photos as PhotoSummary[]) ?? [];
+    items = photos.map((photo) => ({ photo, size: 1 as const, key: ++seq }));
     displayUrl = (initial.displayUrl ?? '').replace(/^https?:\/\//, '');
     qrSvg = initial.qr ?? '';
-    // Fill cells with the most recent photos.
-    for (let i = 0; i < Math.min(pool.length, CELL_COUNT); i++) {
-      cells[i] = { key: nextKey(), photo: pool[i] };
-    }
-    cells = cells;
+    partyPassword = initial.partyPassword ?? '';
+    if (typeof initial.cellSize === 'number') cellSize = initial.cellSize;
 
-    cycleTimer = setInterval(cycle, CYCLE_MS);
+    recompute();
+    window.addEventListener('resize', recompute);
 
-    es = new EventSource('/api/sse?wall=1');
+    es = new EventSource('/api/sse');
     es.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
         if (msg.type === 'photo.added') placeNew(msg.photo);
         else if (msg.type === 'reaction.changed') applyReactionChange(msg.photoId, msg.counts);
         else if (msg.type === 'photo.hidden') applyHidden(msg.photoId);
+        else if (msg.type === 'settings.changed' && typeof msg.settings?.wall_cell_size === 'number') {
+          cellSize = msg.settings.wall_cell_size;
+          recompute();
+        }
       } catch {
         // ignore
       }
@@ -119,7 +150,10 @@
   });
 
   onDestroy(() => {
-    if (cycleTimer) clearInterval(cycleTimer);
+    // onDestroy also fires at SSR teardown where `window` is undefined.
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('resize', recompute);
+    }
     if (es) es.close();
   });
 </script>
@@ -130,28 +164,24 @@
 
 <div class="wall">
   <div class="grid">
-    {#each cells as cell, i (i)}
-      <div class="slot">
-        {#if cell}
-          {#key cell.key}
-            <div
-              class="cell"
-              in:scale={{ duration: 600, start: 0.85, easing: quintOut }}
-              out:fade={{ duration: 300 }}
-            >
-              <img src={cell.photo.wall} alt="" />
-              <div class="overlay">
-                {#each REACTION_EMOJI as emoji}
-                  {#if cell.photo.reactions[emoji]}
-                    <span class="r" class:pulse={pulses.has(cell.photo.id)}>
-                      {emoji}{cell.photo.reactions[emoji]}
-                    </span>
-                  {/if}
-                {/each}
-              </div>
-            </div>
-          {/key}
-        {/if}
+    {#each visible as item (item.key)}
+      <div class="slot" class:size-2={item.size === 2}>
+        <div
+          class="cell"
+          in:scale={{ duration: 500, start: 0.9, easing: quintOut }}
+          out:fade={{ duration: 250 }}
+        >
+          <img src={item.photo.wall} alt="" />
+          <div class="overlay">
+            {#each REACTION_EMOJI as emoji}
+              {#if item.photo.reactions[emoji]}
+                <span class="r" class:pulse={pulses.has(item.photo.id)}>
+                  {emoji}{item.photo.reactions[emoji]}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        </div>
       </div>
     {/each}
   </div>
@@ -165,7 +195,10 @@
       {#if displayUrl}
         <div class="url">{displayUrl}</div>
       {/if}
-      <div class="hint">scan the QR — no password needed</div>
+      {#if partyPassword}
+        <div class="pw">password: <span class="pw-val">{partyPassword}</span></div>
+      {/if}
+      <div class="hint">…or scan the QR — no password needed</div>
     </div>
   </div>
 </div>
@@ -174,30 +207,39 @@
   :global(body) {
     overflow: hidden;
   }
+  :global(html) {
+    --cols: 6;
+    --cell-size: 200px;
+  }
   .wall {
     position: fixed;
     inset: 0;
     background: #000;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
   }
   .grid {
+    flex: 1;
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    grid-template-rows: repeat(2, auto);
+    grid-template-columns: repeat(var(--cols), 1fr);
+    grid-auto-rows: calc(var(--cell-size) * 4 / 3);
+    grid-auto-flow: dense;
     gap: 6px;
     padding: 6px;
     width: 100vw;
     box-sizing: border-box;
+    align-content: start;
+    overflow: hidden;
   }
   .slot {
     position: relative;
     overflow: hidden;
     background: #0d0d0f;
     border-radius: 6px;
-    aspect-ratio: 3 / 4;
+  }
+  .slot.size-2 {
+    grid-column: span 2;
+    grid-row: span 2;
   }
   .cell {
     position: absolute;
@@ -241,6 +283,7 @@
     gap: 1.25rem;
     padding: 0.75rem 1.25rem 1rem;
     color: rgba(255, 255, 255, 0.92);
+    flex-shrink: 0;
   }
   .qr {
     background: #fff;
@@ -250,8 +293,8 @@
     line-height: 0;
   }
   .qr :global(svg) {
-    width: 110px;
-    height: 110px;
+    width: 120px;
+    height: 120px;
     display: block;
   }
   .banner-text {
@@ -261,22 +304,33 @@
     text-align: left;
   }
   .prompt {
-    font-size: 1.05rem;
+    font-size: 1rem;
     color: rgba(255, 255, 255, 0.9);
     letter-spacing: 0.02em;
   }
   .url {
-    font-size: 1.6rem;
-    font-weight: 600;
+    font-size: 1.55rem;
+    font-weight: 700;
     background: linear-gradient(90deg, var(--accent), var(--accent-2));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.01em;
+    line-height: 1.1;
+  }
+  .pw {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.72);
+  }
+  .pw-val {
+    color: var(--accent-2);
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
   .hint {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
   }
 </style>

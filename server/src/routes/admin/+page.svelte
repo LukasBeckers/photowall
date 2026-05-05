@@ -5,6 +5,19 @@
   let photos = data.photos;
   let filter: 'all' | 'guest' | 'sdcard' | 'hidden' = 'all';
   let busy: Set<string> = new Set();
+  let cellSize = data.cellSize;
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function onCellSizeInput() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'wall_cell_size', value: cellSize })
+      });
+    }, 200);
+  }
 
   $: visiblePhotos = photos.filter((p) => {
     if (filter === 'all') return true;
@@ -70,6 +83,21 @@
 </header>
 
 <main>
+  <section class="settings">
+    <label class="slider">
+      <span class="label">Wall cell size: <strong>{cellSize}px</strong></span>
+      <input
+        type="range"
+        min="80"
+        max="360"
+        step="20"
+        bind:value={cellSize}
+        on:input={onCellSizeInput}
+      />
+      <span class="hint">smaller = more photos on the wall · changes apply live</span>
+    </label>
+  </section>
+
   <section class="actions">
     <a href="/api/admin/download-all" class="primary">⬇ Download archive (zip of originals)</a>
     <button class="primary" on:click={() => generateQrToken('entrance')}>📱 Generate entrance QR</button>
@@ -171,6 +199,29 @@
     gap: 0.75rem;
     flex-wrap: wrap;
     margin-bottom: 1rem;
+  }
+  .settings {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+  }
+  .slider {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .slider .label {
+    font-size: 0.95rem;
+  }
+  .slider input[type='range'] {
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .slider .hint {
+    font-size: 0.8rem;
+    color: var(--muted);
   }
   .primary {
     background: var(--accent);

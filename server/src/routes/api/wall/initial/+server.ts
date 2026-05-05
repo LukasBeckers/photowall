@@ -1,14 +1,17 @@
-// Unauthenticated endpoint serving the initial photo set for the TV wall.
-// The wall is meant to be visible without a keyboard, so it can't go through
-// the guest login flow.
-import { json } from '@sveltejs/kit';
+// Initial photo set + presentation metadata for the TV wall.
+// Now session-gated (the host signs in once on the TV with the party password).
+// We can therefore safely include the party password in the response so the
+// wall can show it as a fallback for guests who can't scan the QR.
+import { json, error } from '@sveltejs/kit';
 import { desc, isNull, sql } from 'drizzle-orm';
 import type { RequestHandler } from './$types';
 import { db, schema } from '$lib/server/db';
 import { issueToken } from '$lib/server/token';
 import { renderQrSvg } from '$lib/server/qr';
+import { getSetting } from '$lib/server/settings';
 
-export const GET: RequestHandler = async ({ url }) => {
+export const GET: RequestHandler = async ({ url, locals }) => {
+  if (!locals.session) throw error(401, 'Unauthorized');
   const rows = await db
     .select({
       id: schema.photos.id,
@@ -42,19 +45,20 @@ export const GET: RequestHandler = async ({ url }) => {
     uploadedAt: p.uploadedAt,
     takenAt: p.takenAt,
     reactions: p.reactions ?? {},
-    thumb: `/api/photos/${p.id}/file?v=thumb&wall=1`,
-    wall: `/api/photos/${p.id}/file?v=wall&wall=1`,
-    original: `/api/photos/${p.id}/file?v=original&wall=1`
+    thumb: `/api/photos/${p.id}/file?v=thumb`,
+    wall: `/api/photos/${p.id}/file?v=wall`,
+    original: `/api/photos/${p.id}/file?v=original`
   }));
 
-  // Build a fresh entrance QR. Derive the base URL from the request itself
-  // (Caddy passes X-Forwarded-* through), so the QR points at whatever origin
-  // the TV is currently being served from — works for LAN IPs and public domains.
-  // PUBLIC_BASE_URL is only used as a last-resort fallback.
-  const base = (`${url.protocol}//${url.host}` || process.env.PUBLIC_BASE_URL || '').replace(/\/$/, '');
+  // Always derive the base URL from the request. Caddy passes X-Forwarded-Proto
+  // and X-Forwarded-Host through, so this matches whatever origin the TV is
+  // being served at — LAN IP, public domain, anything.
+  const base = `${url.protocol}//${url.host}`;
   const token = issueToken({ label: 'wall' });
   const loginUrl = `${base}/login?t=${token}`;
   const qr = renderQrSvg(loginUrl);
+  const partyPassword = process.env.PARTY_PASSWORD ?? '';
+  const cellSize = await getSetting<number>('wall_cell_size', 200);
 
-  return json({ photos, loginUrl, qr, displayUrl: base });
+  return json({ photos, loginUrl, qr, displayUrl: base, partyPassword, cellSize });
 };

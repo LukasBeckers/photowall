@@ -3,9 +3,8 @@ import { redirect, error } from '@sveltejs/kit';
 import { readSessionFromCookies, readAdminFromCookies } from '$lib/server/auth';
 
 // Routes that don't require a guest session.
-function isPublicRoute(pathname: string, search: string): boolean {
+function isPublicRoute(pathname: string): boolean {
   if (pathname === '/login') return true;
-  if (pathname === '/wall') return true;
   if (pathname === '/health') return true;
   if (
     pathname === '/favicon.ico' ||
@@ -16,15 +15,8 @@ function isPublicRoute(pathname: string, search: string): boolean {
     return true;
   if (pathname.startsWith('/_app/')) return true;
   if (pathname === '/admin/login') return true;
+  // Watcher endpoint authenticates with bearer token, not cookies.
   if (pathname === '/api/upload/sdcard') return true;
-  if (pathname === '/api/wall/initial') return true;
-  if (pathname === '/api/sse' && new URLSearchParams(search).get('wall') === '1') return true;
-  if (
-    pathname.startsWith('/api/photos/') &&
-    pathname.endsWith('/file') &&
-    new URLSearchParams(search).get('wall') === '1'
-  )
-    return true;
   return false;
 }
 
@@ -50,7 +42,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   } else if (isAdminApi(pathname)) {
     if (!event.locals.admin) throw error(403, 'Admin only');
-  } else if (!isPublicRoute(pathname, search) && !event.locals.session) {
+  } else if (!isPublicRoute(pathname) && !event.locals.session) {
     throw redirect(302, `/login?next=${encodeURIComponent(pathname + search)}`);
   }
 

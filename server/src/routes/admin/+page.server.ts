@@ -1,6 +1,7 @@
 import type { PageServerLoad } from './$types';
 import { desc } from 'drizzle-orm';
 import { db, schema } from '$lib/server/db';
+import { getSetting } from '$lib/server/settings';
 
 export const load: PageServerLoad = async () => {
   const rows = await db
@@ -18,11 +19,14 @@ export const load: PageServerLoad = async () => {
     .orderBy(desc(schema.photos.uploadedAt))
     .limit(500);
 
+  const cellSize = await getSetting<number>('wall_cell_size', 200);
+
   return {
     photos: rows.map((r) => ({
       ...r,
       uploadedAt: r.uploadedAt.toISOString(),
       hiddenAt: r.hiddenAt?.toISOString() ?? null
-    }))
+    })),
+    cellSize
   };
 };

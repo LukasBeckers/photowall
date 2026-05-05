@@ -9,9 +9,7 @@ import { streamFile } from '$lib/server/storage';
 const VARIANTS = new Set(['thumb', 'wall', 'original']);
 
 export const GET: RequestHandler = async ({ params, url, locals, request }) => {
-  // Wall display has no login, so it requests files with ?wall=1.
-  const isWall = url.searchParams.get('wall') === '1';
-  if (!isWall && !locals.session && !locals.admin) throw error(401, 'Unauthorized');
+  if (!locals.session && !locals.admin) throw error(401, 'Unauthorized');
 
   const variant = url.searchParams.get('v') ?? 'thumb';
   if (!VARIANTS.has(variant)) throw error(400, 'Bad variant');
