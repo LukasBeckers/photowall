@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import type { PageData } from './$types';
   import type { PhotoSummary, PhotoListResponse } from '$lib/types';
   import { REACTION_EMOJI } from '$lib/emoji';
@@ -13,6 +13,24 @@
   let openPhoto: PhotoSummary | null = null;
   let myReactions: Map<string, Set<string>> = new Map(); // photoId -> emojis
   let pendingUploads: Array<{ key: string; name: string; status: 'uploading' | 'error'; previewUrl?: string }> = [];
+  let es: EventSource | null = null;
+
+  // Helper: replace a photo's reactions inside `photos` and (if open) `openPhoto`.
+  // Uses immutable updates so Svelte's prop comparison detects the change.
+  function applyCounts(photoId: string, counts: Record<string, number>) {
+    photos = photos.map((p) => (p.id === photoId ? { ...p, reactions: counts } : p));
+    if (openPhoto?.id === photoId) openPhoto = { ...openPhoto, reactions: counts };
+  }
+
+  function setMyReaction(photoId: string, emoji: string, on: boolean) {
+    const prev = myReactions.get(photoId) ?? new Set<string>();
+    const next = new Set(prev);
+    if (on) next.add(emoji);
+    else next.delete(emoji);
+    // New Map identity so reactive subscribers refresh; new Set identity so the
+    // PhotoModal prop comparison sees a fresh value.
+    myReactions = new Map(myReactions).set(photoId, next);
+  }
 
   async function loadPage(before?: string | null) {
     if (loading) return;
@@ -36,10 +54,11 @@
     const res = await fetch('/api/me/reactions?ids=' + ids.join(','));
     if (!res.ok) return;
     const json = (await res.json()) as { reactions: Record<string, string[]> };
+    const next = new Map(myReactions);
     for (const [pid, list] of Object.entries(json.reactions)) {
-      myReactions.set(pid, new Set(list));
+      next.set(pid, new Set(list));
     }
-    myReactions = myReactions; // trigger reactivity
+    myReactions = next;
   }
 
   async function handleFiles(input: HTMLInputElement) {
@@ -73,18 +92,16 @@
   }
 
   async function react(photo: PhotoSummary, emoji: string, on: boolean) {
-    const have = myReactions.get(photo.id) ?? new Set<string>();
-    if (on) have.add(emoji);
-    else have.delete(emoji);
-    myReactions.set(photo.id, have);
+    // Save originals so we can revert if the request fails.
+    const originalCounts = photo.reactions;
 
-    // optimistic counts
-    const next = { ...photo.reactions };
-    next[emoji] = (next[emoji] ?? 0) + (on ? 1 : -1);
-    if (next[emoji] <= 0) delete next[emoji];
-    photo.reactions = next;
-    photos = photos;
-    if (openPhoto?.id === photo.id) openPhoto = { ...photo };
+    setMyReaction(photo.id, emoji, on);
+
+    // Optimistic count update.
+    const optimistic = { ...originalCounts };
+    optimistic[emoji] = (optimistic[emoji] ?? 0) + (on ? 1 : -1);
+    if (optimistic[emoji] <= 0) delete optimistic[emoji];
+    applyCounts(photo.id, optimistic);
 
     try {
       const res = await fetch(`/api/photos/${photo.id}/react`, {
@@ -94,15 +111,12 @@
       });
       if (!res.ok) throw new Error('react failed');
       const j = (await res.json()) as { photoId: string; counts: Record<string, number> };
-      photo.reactions = j.counts;
-      photos = photos;
-      if (openPhoto?.id === photo.id) openPhoto = { ...photo };
+      // Server is authoritative — accept its counts even if they differ.
+      applyCounts(photo.id, j.counts);
     } catch {
-      // revert
-      if (on) have.delete(emoji);
-      else have.add(emoji);
-      myReactions.set(photo.id, have);
-      myReactions = myReactions;
+      // Revert on failure.
+      setMyReaction(photo.id, emoji, !on);
+      applyCounts(photo.id, originalCounts);
     }
   }
 
@@ -118,7 +132,36 @@
   onMount(() => {
     loadPage();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+
+    // Live updates from the server: other guests' uploads + everyone's
+    // reactions. Our own reactions also come back through here as a
+    // confirmation, which is harmless because applyCounts is idempotent.
+    es = new EventSource('/api/sse');
+    es.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'reaction.changed') {
+          applyCounts(msg.photoId, msg.counts);
+        } else if (msg.type === 'photo.added') {
+          // Avoid duplicating photos we already have (e.g. our own upload).
+          if (!photos.some((p) => p.id === msg.photo.id)) {
+            photos = [msg.photo, ...photos];
+          }
+        } else if (msg.type === 'photo.hidden') {
+          photos = photos.filter((p) => p.id !== msg.photoId);
+          if (openPhoto?.id === msg.photoId) openPhoto = null;
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+  });
+
+  onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scroll', onScroll);
+    }
+    if (es) es.close();
   });
 
   $: openMine = openPhoto ? myReactions.get(openPhoto.id) ?? new Set<string>() : new Set<string>();
