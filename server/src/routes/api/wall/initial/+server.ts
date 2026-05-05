@@ -56,7 +56,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   const base = `${url.protocol}//${url.host}`;
   const token = issueToken({ label: 'wall' });
   const loginUrl = `${base}/login?t=${token}`;
-  const qr = renderQrSvg(loginUrl);
+  const qr = await renderQrSvg(loginUrl);
   const partyPassword = process.env.PARTY_PASSWORD ?? '';
   const cellSize = await getSetting<number>('wall_cell_size', 200);
 

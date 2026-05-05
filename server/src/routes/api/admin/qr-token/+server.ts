@@ -12,6 +12,6 @@ export const POST: RequestHandler = async ({ request, locals, url }) => {
   const token = issueToken({ label });
   const base = `${url.protocol}//${url.host}`;
   const fullUrl = `${base}/login?t=${token}`;
-  const qr = renderQrSvg(fullUrl);
+  const qr = await renderQrSvg(fullUrl);
   return json({ token, url: fullUrl, qr });
 };

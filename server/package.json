@@ -17,6 +17,7 @@
     "@sveltejs/kit": "2.5.27",
     "@sveltejs/vite-plugin-svelte": "3.1.2",
     "@types/node": "20.14.10",
+    "@types/qrcode": "1.5.5",
     "drizzle-kit": "0.24.0",
     "svelte": "4.2.19",
     "svelte-check": "3.8.5",
@@ -32,6 +33,7 @@
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.11.0",
     "postgres": "^3.4.0",
+    "qrcode": "^1.5.4",
     "sharp": "^0.33.0"
   }
 }
