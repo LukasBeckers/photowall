@@ -1,0 +1,353 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import type { PageData } from './$types';
+  import type { PhotoSummary, PhotoListResponse } from '$lib/types';
+  import { REACTION_EMOJI } from '$lib/emoji';
+  import PhotoModal from '$lib/ui/PhotoModal.svelte';
+
+  export let data: PageData;
+
+  let photos: PhotoSummary[] = [];
+  let nextBefore: string | null = null;
+  let loading = false;
+  let openPhoto: PhotoSummary | null = null;
+  let myReactions: Map<string, Set<string>> = new Map(); // photoId -> emojis
+  let pendingUploads: Array<{ key: string; name: string; status: 'uploading' | 'error'; previewUrl?: string }> = [];
+
+  async function loadPage(before?: string | null) {
+    if (loading) return;
+    loading = true;
+    try {
+      const url = new URL('/api/photos', window.location.origin);
+      if (before) url.searchParams.set('before', before);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('list failed');
+      const data = (await res.json()) as PhotoListResponse;
+      photos = before ? [...photos, ...data.photos] : data.photos;
+      nextBefore = data.nextBefore;
+      await refreshMyReactions(data.photos.map((p) => p.id));
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function refreshMyReactions(ids: string[]) {
+    if (ids.length === 0) return;
+    const res = await fetch('/api/me/reactions?ids=' + ids.join(','));
+    if (!res.ok) return;
+    const json = (await res.json()) as { reactions: Record<string, string[]> };
+    for (const [pid, list] of Object.entries(json.reactions)) {
+      myReactions.set(pid, new Set(list));
+    }
+    myReactions = myReactions; // trigger reactivity
+  }
+
+  async function handleFiles(input: HTMLInputElement) {
+    const files = Array.from(input.files ?? []);
+    input.value = ''; // allow re-selecting the same file
+    if (files.length === 0) return;
+
+    const tempEntries = files.map((f) => ({
+      key: `${Date.now()}-${f.name}`,
+      name: f.name,
+      status: 'uploading' as const,
+      previewUrl: URL.createObjectURL(f)
+    }));
+    pendingUploads = [...tempEntries, ...pendingUploads];
+
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+
+    try {
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (!res.ok) throw new Error(`upload HTTP ${res.status}`);
+      // Drop temp entries, refresh from server.
+      pendingUploads = pendingUploads.filter((p) => !tempEntries.some((t) => t.key === p.key));
+      for (const t of tempEntries) URL.revokeObjectURL(t.previewUrl!);
+      await loadPage();
+    } catch (e) {
+      pendingUploads = pendingUploads.map((p) =>
+        tempEntries.some((t) => t.key === p.key) ? { ...p, status: 'error' as const } : p
+      );
+    }
+  }
+
+  async function react(photo: PhotoSummary, emoji: string, on: boolean) {
+    const have = myReactions.get(photo.id) ?? new Set<string>();
+    if (on) have.add(emoji);
+    else have.delete(emoji);
+    myReactions.set(photo.id, have);
+
+    // optimistic counts
+    const next = { ...photo.reactions };
+    next[emoji] = (next[emoji] ?? 0) + (on ? 1 : -1);
+    if (next[emoji] <= 0) delete next[emoji];
+    photo.reactions = next;
+    photos = photos;
+    if (openPhoto?.id === photo.id) openPhoto = { ...photo };
+
+    try {
+      const res = await fetch(`/api/photos/${photo.id}/react`, {
+        method: on ? 'POST' : 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ emoji })
+      });
+      if (!res.ok) throw new Error('react failed');
+      const j = (await res.json()) as { photoId: string; counts: Record<string, number> };
+      photo.reactions = j.counts;
+      photos = photos;
+      if (openPhoto?.id === photo.id) openPhoto = { ...photo };
+    } catch {
+      // revert
+      if (on) have.delete(emoji);
+      else have.add(emoji);
+      myReactions.set(photo.id, have);
+      myReactions = myReactions;
+    }
+  }
+
+  function onScroll() {
+    if (!nextBefore || loading) return;
+    const remaining =
+      document.documentElement.scrollHeight -
+      window.scrollY -
+      window.innerHeight;
+    if (remaining < 800) loadPage(nextBefore);
+  }
+
+  onMount(() => {
+    loadPage();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  });
+
+  $: openMine = openPhoto ? myReactions.get(openPhoto.id) ?? new Set<string>() : new Set<string>();
+</script>
+
+<svelte:head><title>Photowall</title></svelte:head>
+
+<header>
+  <div class="brand">photowall</div>
+  <div class="who">
+    <span class="muted">Hi {data.displayName}</span>
+    <form method="POST" action="/logout" class="signout">
+      <button type="submit" class="ghost-tiny">sign out</button>
+    </form>
+  </div>
+</header>
+
+<main>
+  <label class="add-btn">
+    <input
+      type="file"
+      accept="image/*"
+      multiple
+      capture="environment"
+      on:change={(e) => handleFiles(e.currentTarget)}
+    />
+    <span>＋ Add photos</span>
+  </label>
+
+  <div class="grid">
+    {#each pendingUploads as p (p.key)}
+      <div class="card pending" class:errored={p.status === 'error'}>
+        {#if p.previewUrl}<img src={p.previewUrl} alt="" />{/if}
+        <div class="overlay">
+          {p.status === 'uploading' ? 'uploading…' : 'failed'}
+        </div>
+      </div>
+    {/each}
+
+    {#each photos as photo (photo.id)}
+      <button class="card" on:click={() => (openPhoto = photo)}>
+        <img src={photo.thumb} alt="" loading="lazy" />
+        <div class="card-meta">
+          <span class="who-tag">{photo.uploader}</span>
+          <span class="counts">
+            {#each REACTION_EMOJI as emoji}
+              {#if photo.reactions[emoji]}
+                <span class="count">{emoji}{photo.reactions[emoji]}</span>
+              {/if}
+            {/each}
+          </span>
+        </div>
+      </button>
+    {/each}
+  </div>
+
+  {#if !loading && photos.length === 0 && pendingUploads.length === 0}
+    <p class="empty">No photos yet. Tap "Add photos" to start.</p>
+  {/if}
+  {#if loading}
+    <p class="empty">Loading…</p>
+  {/if}
+
+  <p class="footer">
+    <a href="/wall">Open the TV wall →</a>
+  </p>
+</main>
+
+{#if openPhoto}
+  <PhotoModal
+    photo={openPhoto}
+    myReactions={openMine}
+    on:close={() => (openPhoto = null)}
+    on:react={(e) => openPhoto && react(openPhoto, e.detail.emoji, e.detail.on)}
+  />
+{/if}
+
+<style>
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(8px);
+    z-index: 10;
+  }
+  .brand {
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    font-size: 0.95rem;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+  }
+  .muted {
+    color: var(--muted);
+  }
+  .signout {
+    margin: 0;
+  }
+  .ghost-tiny {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+  }
+
+  main {
+    padding: 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .add-btn {
+    display: block;
+    margin: 0.25rem 0 1rem;
+    cursor: pointer;
+  }
+  .add-btn input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .add-btn span {
+    display: block;
+    background: var(--accent);
+    color: #fff;
+    text-align: center;
+    padding: 0.85rem 1rem;
+    border-radius: 0.75rem;
+    font-weight: 600;
+    box-shadow: 0 6px 20px rgba(255, 79, 139, 0.25);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .card {
+    position: relative;
+    aspect-ratio: 1 / 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    padding: 0;
+    cursor: pointer;
+  }
+  .card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .card-meta {
+    position: absolute;
+    inset: auto 0 0 0;
+    padding: 0.4rem 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 0.25rem;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+    font-size: 0.7rem;
+  }
+  .who-tag {
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 60%;
+  }
+  .counts {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .count {
+    background: rgba(0, 0, 0, 0.6);
+    padding: 1px 5px;
+    border-radius: 999px;
+    color: #fff;
+    font-size: 0.7rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .pending {
+    opacity: 0.65;
+  }
+  .pending.errored {
+    border-color: #ff5050;
+  }
+  .pending .overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 0.8rem;
+  }
+
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 2rem 1rem;
+  }
+  .footer {
+    text-align: center;
+    margin-top: 2rem;
+    padding-bottom: 2rem;
+  }
+</style>

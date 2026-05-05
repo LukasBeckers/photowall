@@ -1,0 +1,19 @@
+[project]
+name = "photowall-watcher"
+version = "0.1.0"
+description = "Auto-uploads photos from SD cards to a Photowall server"
+requires-python = ">=3.11"
+dependencies = [
+    "pyudev>=0.24,<0.25",
+    "httpx>=0.27,<0.28",
+    "fastapi>=0.110,<1.0",
+    "uvicorn[standard]>=0.27,<0.40",
+    "jinja2>=3.1,<4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["photowall_watcher*"]

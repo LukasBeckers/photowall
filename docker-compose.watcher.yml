@@ -1,0 +1,23 @@
+services:
+  watcher:
+    build:
+      context: ./watcher
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    privileged: true
+    environment:
+      SERVER_URL: ${SERVER_URL}
+      WATCHER_TOKEN: ${WATCHER_TOKEN}
+      MEDIA_ROOT: /media
+      UPLOAD_LABEL: ${UPLOAD_LABEL:-Camera (SD card)}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      # SD-card autodetect via udev
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+      # See SD cards mounted by the host. rshared so new mounts propagate in.
+      - /media:/media:rshared
+      # Persistent state — remembers which sha256s we've already uploaded.
+      - ./watcher-state:/var/lib/photowall-watcher
+    ports:
+      - "8080:8080"

@@ -1,0 +1,21 @@
+# Global options
+{
+	# Email for ACME (Let's Encrypt). Optional - uncomment & set in prod.
+	# email you@example.com
+}
+
+{$CADDY_DOMAIN:80} {
+	encode zstd gzip
+
+	request_body {
+		max_size 1GB
+	}
+
+	reverse_proxy app:3000 {
+		flush_interval -1
+		transport http {
+			read_timeout 5m
+			write_timeout 5m
+		}
+	}
+}

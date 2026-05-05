@@ -1,0 +1,14 @@
+node_modules/
+.svelte-kit/
+build/
+dist/
+.env
+.env.local
+data/
+db/
+watcher-state/
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.DS_Store
