@@ -184,7 +184,7 @@
   <label class="add-btn">
     <input
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       multiple
       on:change={(e) => handleFiles(e.currentTarget)}
     />
