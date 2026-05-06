@@ -13,7 +13,15 @@
   let loading = false;
   let openPhoto: PhotoSummary | null = null;
   let myReactions: Map<string, Set<string>> = new Map(); // photoId -> emojis
-  let pendingUploads: Array<{ key: string; name: string; status: 'uploading' | 'error'; previewUrl?: string }> = [];
+  const MAX_BYTES = 200 * 1024 * 1024;
+
+  let pendingUploads: Array<{
+    key: string;
+    name: string;
+    status: 'uploading' | 'error';
+    error?: string;
+    previewUrl?: string;
+  }> = [];
   let es: EventSource | null = null;
 
   // Helper: replace a photo's reactions inside `photos` and (if open) `openPhoto`.
@@ -63,33 +71,108 @@
   }
 
   async function handleFiles(input: HTMLInputElement) {
-    const files = Array.from(input.files ?? []);
+    const all = Array.from(input.files ?? []);
     input.value = ''; // allow re-selecting the same file
-    if (files.length === 0) return;
+    if (all.length === 0) return;
 
-    const tempEntries = files.map((f) => ({
-      key: `${Date.now()}-${f.name}`,
-      name: f.name,
-      status: 'uploading' as const,
-      previewUrl: URL.createObjectURL(f)
-    }));
-    pendingUploads = [...tempEntries, ...pendingUploads];
+    // Client-side size check so we don't waste a 200 MB upload on a clip
+    // we already know we'll reject. Track each file with its own preview entry.
+    const tempEntries = all.map((f) => {
+      let error: string | undefined;
+      if (f.size > MAX_BYTES) {
+        error = `Too large (${(f.size / 1024 / 1024).toFixed(0)} MB; max 200 MB)`;
+      } else if (f.size === 0) {
+        error = 'Empty file';
+      }
+      return {
+        file: f,
+        key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${f.name}`,
+        name: f.name,
+        status: error ? ('error' as const) : ('uploading' as const),
+        error,
+        previewUrl: URL.createObjectURL(f)
+      };
+    });
+    pendingUploads = [...tempEntries.map(({ file: _, ...rest }) => rest), ...pendingUploads];
+
+    const ok = tempEntries.filter((e) => !e.error);
+    if (ok.length === 0) return; // nothing to send; rejected entries stay visible
 
     const fd = new FormData();
-    for (const f of files) fd.append('files', f);
+    for (const e of ok) fd.append('files', e.file);
 
     try {
       const res = await fetch('/api/upload', { method: 'POST', body: fd });
-      if (!res.ok) throw new Error(`upload HTTP ${res.status}`);
-      // Drop temp entries, refresh from server.
-      pendingUploads = pendingUploads.filter((p) => !tempEntries.some((t) => t.key === p.key));
-      for (const t of tempEntries) URL.revokeObjectURL(t.previewUrl!);
+
+      if (!res.ok) {
+        // Try to read the server's error text so we can show it.
+        let detail = `HTTP ${res.status}`;
+        try {
+          const text = await res.text();
+          if (text) {
+            try {
+              const j = JSON.parse(text);
+              detail = j.message ?? j.error ?? detail;
+            } catch {
+              detail = text.slice(0, 200);
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+        markErrors(tempEntries, () => detail);
+        return;
+      }
+
+      const body = (await res.json()) as {
+        uploaded: Array<{ id: string; duplicate: boolean; name: string }>;
+        errors: Array<{ name: string; error: string }>;
+      };
+      // Per-file errors come back in body.errors. Map them to the right entries.
+      const errMap = new Map(body.errors.map((e) => [e.name, e.error]));
+      for (const t of tempEntries) {
+        if (t.error) continue; // already rejected client-side
+        const e = errMap.get(t.name);
+        if (e) {
+          t.status = 'error';
+          t.error = e;
+        }
+      }
+      // Drop entries that succeeded; keep failures visible.
+      const succeeded = new Set(
+        tempEntries
+          .filter((t) => t.status !== 'error' && !errMap.has(t.name))
+          .map((t) => t.key)
+      );
+      pendingUploads = pendingUploads.map((p) => {
+        const match = tempEntries.find((t) => t.key === p.key);
+        if (!match) return p;
+        return { ...p, status: match.status, error: match.error };
+      });
+      pendingUploads = pendingUploads.filter((p) => !succeeded.has(p.key));
+      for (const t of tempEntries) {
+        if (succeeded.has(t.key) && t.previewUrl) URL.revokeObjectURL(t.previewUrl);
+      }
       await loadPage();
     } catch (e) {
-      pendingUploads = pendingUploads.map((p) =>
-        tempEntries.some((t) => t.key === p.key) ? { ...p, status: 'error' as const } : p
-      );
+      // Network failure / disconnect / browser timeout
+      const msg = (e as Error).message || 'Network error';
+      markErrors(tempEntries, () => msg);
     }
+  }
+
+  function markErrors(
+    tempEntries: Array<{ key: string; status: 'uploading' | 'error'; error?: string }>,
+    msg: (entry: { key: string; status: 'uploading' | 'error' }) => string
+  ) {
+    pendingUploads = pendingUploads.map((p) => {
+      const t = tempEntries.find((x) => x.key === p.key);
+      if (!t) return p;
+      // Don't overwrite a client-side rejection (e.g. "too large") with a
+      // generic network error.
+      if (t.status === 'error' && t.error) return { ...p, status: 'error', error: t.error };
+      return { ...p, status: 'error', error: msg(t) };
+    });
   }
 
   async function react(photo: PhotoSummary, emoji: string, on: boolean) {
@@ -196,7 +279,12 @@
       <div class="card pending" class:errored={p.status === 'error'}>
         {#if p.previewUrl}<img src={p.previewUrl} alt="" />{/if}
         <div class="overlay">
-          {p.status === 'uploading' ? 'uploading…' : 'failed'}
+          {#if p.status === 'uploading'}
+            uploading…
+          {:else}
+            <span class="err-name">{p.name}</span>
+            <span class="err-msg">{p.error ?? 'failed'}</span>
+          {/if}
         </div>
       </div>
     {/each}
@@ -396,11 +484,27 @@
   .pending .overlay {
     position: absolute;
     inset: 0;
-    display: grid;
-    place-items: center;
-    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    background: rgba(0, 0, 0, 0.6);
     color: #fff;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
+    padding: 0.4rem;
+    text-align: center;
+  }
+  .err-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .err-msg {
+    color: #ffb0b0;
+    font-size: 0.7rem;
   }
 
   .empty {
