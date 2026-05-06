@@ -129,6 +129,7 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
     takenAt: takenAt?.toISOString() ?? null,
     reactions: {},
     mime: input.mime,
+    speed: 1,
     thumb: `/api/photos/${row.id}/file?v=thumb`,
     wall: `/api/photos/${row.id}/file?v=wall`,
     original: `/api/photos/${row.id}/file?v=original`

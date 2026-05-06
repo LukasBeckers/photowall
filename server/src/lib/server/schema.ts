@@ -1,4 +1,14 @@
-import { pgTable, uuid, text, timestamp, integer, bigint, index, primaryKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  timestamp,
+  integer,
+  bigint,
+  real,
+  index,
+  primaryKey
+} from 'drizzle-orm/pg-core';
 
 export const sessions = pgTable('sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -25,7 +35,8 @@ export const photos = pgTable(
     takenAt: timestamp('taken_at', { withTimezone: true }),
     uploadedAt: timestamp('uploaded_at', { withTimezone: true }).defaultNow().notNull(),
     hiddenAt: timestamp('hidden_at', { withTimezone: true }),
-    hiddenReason: text('hidden_reason')
+    hiddenReason: text('hidden_reason'),
+    playbackSpeed: real('playback_speed').notNull().default(1)
   },
   (t) => ({
     uploadedAtIdx: index('photos_uploaded_at_idx').on(t.uploadedAt)

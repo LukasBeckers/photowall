@@ -104,6 +104,33 @@
     items = items.filter((it) => it.photo.id !== photoId);
   }
 
+  function applySpeedChange(photoId: string, speed: number) {
+    items = items.map((it) =>
+      it.photo.id === photoId ? { ...it, photo: { ...it.photo, speed } } : it
+    );
+  }
+
+  // Svelte action: keep a video element's playbackRate in sync with `speed`.
+  // Some browsers reset playbackRate when the source loads, so we reapply on
+  // loadedmetadata too.
+  function videoRate(node: HTMLVideoElement, initial: number) {
+    let current = initial || 1;
+    const apply = () => {
+      node.playbackRate = current;
+    };
+    apply();
+    node.addEventListener('loadedmetadata', apply);
+    return {
+      update(next: number) {
+        current = next || 1;
+        node.playbackRate = current;
+      },
+      destroy() {
+        node.removeEventListener('loadedmetadata', apply);
+      }
+    };
+  }
+
   function bannerHeight(): number {
     const el = document.querySelector('.banner') as HTMLElement | null;
     return el ? el.offsetHeight : 140;
@@ -140,6 +167,7 @@
         if (msg.type === 'photo.added') placeNew(msg.photo);
         else if (msg.type === 'reaction.changed') applyReactionChange(msg.photoId, msg.counts);
         else if (msg.type === 'photo.hidden') applyHidden(msg.photoId);
+        else if (msg.type === 'photo.speed_changed') applySpeedChange(msg.photoId, msg.speed);
         else if (msg.type === 'settings.changed' && typeof msg.settings?.wall_cell_size === 'number') {
           cellSize = msg.settings.wall_cell_size;
           recompute();
@@ -175,6 +203,7 @@
           {#if isVideo(item.photo)}
             <!-- svelte-ignore a11y-media-has-caption -->
             <video
+              use:videoRate={item.photo.speed}
               src={item.photo.original}
               poster={item.photo.wall}
               autoplay

@@ -10,7 +10,17 @@
   const dispatch = createEventDispatcher<{
     close: void;
     react: { emoji: string; on: boolean };
+    speed: { speed: number };
   }>();
+
+  const SPEED_PRESETS = [0.25, 0.5, 1, 2, 4] as const;
+
+  let videoEl: HTMLVideoElement | null = null;
+
+  // Apply playback rate whenever the bound element appears or photo.speed changes.
+  // Some browsers reset playbackRate when the source loads, so we also reapply
+  // on `loadedmetadata`.
+  $: if (videoEl && photo) videoEl.playbackRate = photo.speed || 1;
 
   function close() {
     dispatch('close');
@@ -23,6 +33,15 @@
   function toggle(emoji: string) {
     const on = !myReactions.has(emoji);
     dispatch('react', { emoji, on });
+  }
+
+  function setSpeed(s: number) {
+    if (videoEl) videoEl.playbackRate = s;
+    dispatch('speed', { speed: s });
+  }
+
+  function onLoadedMetadata() {
+    if (videoEl) videoEl.playbackRate = photo.speed || 1;
   }
 </script>
 
@@ -40,6 +59,7 @@
 
     {#if isVideo(photo)}
       <video
+        bind:this={videoEl}
         src={photo.original}
         poster={photo.wall}
         autoplay
@@ -47,7 +67,19 @@
         muted
         playsinline
         controls
+        on:loadedmetadata={onLoadedMetadata}
       ></video>
+      <div class="speed">
+        <span class="speed-label">Speed</span>
+        {#each SPEED_PRESETS as s}
+          <button
+            type="button"
+            class="speed-btn"
+            class:active={(photo.speed || 1) === s}
+            on:click={() => setSpeed(s)}
+          >{s}×</button>
+        {/each}
+      </div>
     {:else}
       <img src={photo.wall} alt="" />
     {/if}
@@ -132,6 +164,37 @@
     color: var(--accent);
     text-decoration: none;
     font-size: 0.9rem;
+  }
+  .speed {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1rem;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .speed-label {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-right: 0.25rem;
+  }
+  .speed-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.85rem;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+    transition: transform 0.1s ease, background 0.15s ease;
+  }
+  .speed-btn:active {
+    transform: scale(0.95);
+  }
+  .speed-btn.active {
+    background: rgba(255, 79, 139, 0.15);
+    border-color: var(--accent);
+    color: #fff;
   }
   .reactions {
     display: flex;

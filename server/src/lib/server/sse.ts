@@ -8,6 +8,7 @@ export type SSEEvent =
   | { type: 'photo.added'; photo: PhotoSummary }
   | { type: 'photo.hidden'; photoId: string }
   | { type: 'reaction.changed'; photoId: string; counts: Record<string, number> }
+  | { type: 'photo.speed_changed'; photoId: string; speed: number }
   | { type: 'settings.changed'; settings: Record<string, unknown> };
 
 class Hub {

@@ -38,6 +38,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     takenAt: row.takenAt,
     hiddenAt: row.hiddenAt,
     reactions,
+    speed: row.playbackSpeed,
     thumb: `/api/photos/${row.id}/file?v=thumb`,
     wall: `/api/photos/${row.id}/file?v=wall`,
     original: `/api/photos/${row.id}/file?v=original`

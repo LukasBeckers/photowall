@@ -89,7 +89,7 @@
       <input
         type="range"
         min="80"
-        max="360"
+        max="1000"
         step="20"
         bind:value={cellSize}
         on:input={onCellSizeInput}

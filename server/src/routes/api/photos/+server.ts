@@ -25,6 +25,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
       height: schema.photos.height,
       uploadedAt: schema.photos.uploadedAt,
       takenAt: schema.photos.takenAt,
+      playbackSpeed: schema.photos.playbackSpeed,
       reactions: sql<Record<string, number>>`(
         SELECT COALESCE(json_object_agg(emoji, n), '{}'::json)
         FROM (
@@ -50,6 +51,7 @@ export const GET: RequestHandler = async ({ locals, url }) => {
     uploadedAt: p.uploadedAt,
     takenAt: p.takenAt,
     reactions: p.reactions ?? {},
+    speed: p.playbackSpeed,
     thumb: `/api/photos/${p.id}/file?v=thumb`,
     wall: `/api/photos/${p.id}/file?v=wall`,
     original: `/api/photos/${p.id}/file?v=original`

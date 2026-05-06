@@ -12,6 +12,7 @@ export interface PhotoSummary {
   thumb: string;
   wall: string;
   original: string;
+  speed: number; // playback rate; 1.0 = normal. Only meaningful for videos.
 }
 
 export interface PhotoListResponse {

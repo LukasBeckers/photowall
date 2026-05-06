@@ -18,7 +18,7 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
   // type arbitrary payloads into the wall.
   if (key === 'wall_cell_size') {
     const v = Number(body.value);
-    if (!Number.isFinite(v) || v < 60 || v > 480) throw error(400, 'cell size out of range');
+    if (!Number.isFinite(v) || v < 60 || v > 1200) throw error(400, 'cell size out of range');
     await putSetting(key, Math.round(v));
   } else {
     throw error(400, 'Unknown setting');

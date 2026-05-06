@@ -31,6 +31,11 @@
     if (openPhoto?.id === photoId) openPhoto = { ...openPhoto, reactions: counts };
   }
 
+  function applySpeed(photoId: string, speed: number) {
+    photos = photos.map((p) => (p.id === photoId ? { ...p, speed } : p));
+    if (openPhoto?.id === photoId) openPhoto = { ...openPhoto, speed };
+  }
+
   function setMyReaction(photoId: string, emoji: string, on: boolean) {
     const prev = myReactions.get(photoId) ?? new Set<string>();
     const next = new Set(prev);
@@ -175,6 +180,21 @@
     });
   }
 
+  async function setVideoSpeed(photo: PhotoSummary, speed: number) {
+    const previous = photo.speed;
+    applySpeed(photo.id, speed);
+    try {
+      const res = await fetch(`/api/photos/${photo.id}/speed`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ speed })
+      });
+      if (!res.ok) throw new Error('speed failed');
+    } catch {
+      applySpeed(photo.id, previous);
+    }
+  }
+
   async function react(photo: PhotoSummary, emoji: string, on: boolean) {
     // Save originals so we can revert if the request fails.
     const originalCounts = photo.reactions;
@@ -226,6 +246,8 @@
         const msg = JSON.parse(e.data);
         if (msg.type === 'reaction.changed') {
           applyCounts(msg.photoId, msg.counts);
+        } else if (msg.type === 'photo.speed_changed') {
+          applySpeed(msg.photoId, msg.speed);
         } else if (msg.type === 'photo.added') {
           // Avoid duplicating photos we already have (e.g. our own upload).
           if (!photos.some((p) => p.id === msg.photo.id)) {
@@ -327,6 +349,7 @@
     myReactions={openMine}
     on:close={() => (openPhoto = null)}
     on:react={(e) => openPhoto && react(openPhoto, e.detail.emoji, e.detail.on)}
+    on:speed={(e) => openPhoto && setVideoSpeed(openPhoto, e.detail.speed)}
   />
 {/if}
 
