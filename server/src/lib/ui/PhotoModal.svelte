@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PhotoSummary } from '$lib/types';
+  import { isVideo } from '$lib/types';
   import { REACTION_EMOJI } from '$lib/emoji';
   import { createEventDispatcher } from 'svelte';
 
@@ -37,7 +38,19 @@
   <div class="modal">
     <button class="close" on:click={close} aria-label="Close">×</button>
 
-    <img src={photo.wall} alt="" />
+    {#if isVideo(photo)}
+      <video
+        src={photo.original}
+        poster={photo.wall}
+        autoplay
+        loop
+        muted
+        playsinline
+        controls
+      ></video>
+    {:else}
+      <img src={photo.wall} alt="" />
+    {/if}
 
     <div class="meta">
       <span class="uploader">{photo.uploader}</span>
@@ -96,7 +109,8 @@
     line-height: 1;
     z-index: 1;
   }
-  img {
+  img,
+  video {
     display: block;
     max-width: 100%;
     max-height: 70vh;

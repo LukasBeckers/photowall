@@ -31,6 +31,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     id: row.id,
     uploader: row.uploaderLabel,
     source: row.source,
+    mime: row.mime,
     width: row.width,
     height: row.height,
     uploadedAt: row.uploadedAt,

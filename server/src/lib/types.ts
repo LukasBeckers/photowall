@@ -8,6 +8,7 @@ export interface PhotoSummary {
   uploadedAt: string;
   takenAt: string | null;
   reactions: Record<string, number>;
+  mime: string;
   thumb: string;
   wall: string;
   original: string;
@@ -16,4 +17,8 @@ export interface PhotoSummary {
 export interface PhotoListResponse {
   photos: PhotoSummary[];
   nextBefore: string | null;
+}
+
+export function isVideo(p: { mime: string }): boolean {
+  return p.mime.startsWith('video/');
 }

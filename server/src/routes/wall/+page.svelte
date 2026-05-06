@@ -3,6 +3,7 @@
   import { fade, scale } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
   import { REACTION_EMOJI } from '$lib/emoji';
+  import { isVideo } from '$lib/types';
   import type { PhotoSummary } from '$lib/types';
 
   type Item = { key: number; photo: PhotoSummary; size: 1 | 2 };
@@ -171,7 +172,19 @@
           in:scale={{ duration: 500, start: 0.9, easing: quintOut }}
           out:fade={{ duration: 250 }}
         >
-          <img src={item.photo.wall} alt="" />
+          {#if isVideo(item.photo)}
+            <!-- svelte-ignore a11y-media-has-caption -->
+            <video
+              src={item.photo.original}
+              poster={item.photo.wall}
+              autoplay
+              loop
+              muted
+              playsinline
+            ></video>
+          {:else}
+            <img src={item.photo.wall} alt="" />
+          {/if}
           <div class="overlay">
             {#each REACTION_EMOJI as emoji}
               {#if item.photo.reactions[emoji]}
@@ -245,7 +258,8 @@
     position: absolute;
     inset: 0;
   }
-  .cell img {
+  .cell img,
+  .cell video {
     width: 100%;
     height: 100%;
     object-fit: cover;

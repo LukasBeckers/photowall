@@ -19,9 +19,10 @@ FROM node:22-bookworm-slim AS runtime
 
 WORKDIR /app
 
-# Sharp needs libvips at runtime
+# Sharp needs libvips at runtime; ffmpeg for video poster extraction.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production

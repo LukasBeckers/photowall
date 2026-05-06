@@ -3,6 +3,7 @@
   import type { PageData } from './$types';
   import type { PhotoSummary, PhotoListResponse } from '$lib/types';
   import { REACTION_EMOJI } from '$lib/emoji';
+  import { isVideo } from '$lib/types';
   import PhotoModal from '$lib/ui/PhotoModal.svelte';
 
   export let data: PageData;
@@ -203,6 +204,9 @@
     {#each photos as photo (photo.id)}
       <button class="card" on:click={() => (openPhoto = photo)}>
         <img src={photo.thumb} alt="" loading="lazy" />
+        {#if isVideo(photo)}
+          <span class="play-badge" aria-hidden="true">▶</span>
+        {/if}
         <div class="card-meta">
           <span class="who-tag">{photo.uploader}</span>
           <span class="counts">
@@ -331,6 +335,23 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+  .play-badge {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1;
+    display: grid;
+    place-items: center;
+    backdrop-filter: blur(4px);
+    pointer-events: none;
   }
   .card-meta {
     position: absolute;

@@ -9,10 +9,11 @@ import {
   moveToOriginal
 } from './storage';
 import { makeThumbnails } from './thumbs';
+import { makeVideoPosters } from './video';
 import { hub } from './sse';
 import type { PhotoSummary } from '$lib/types';
 
-const ALLOWED_MIME = new Set([
+const IMAGE_MIME = new Set([
   'image/jpeg',
   'image/png',
   'image/heic',
@@ -22,6 +23,10 @@ const ALLOWED_MIME = new Set([
   'image/tiff'
 ]);
 
+const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+
+const ALLOWED_MIME = new Set([...IMAGE_MIME, ...VIDEO_MIME]);
+
 const EXT_FROM_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
   'image/png': '.png',
@@ -29,8 +34,13 @@ const EXT_FROM_MIME: Record<string, string> = {
   'image/heif': '.heif',
   'image/webp': '.webp',
   'image/avif': '.avif',
-  'image/tiff': '.tiff'
+  'image/tiff': '.tiff',
+  'video/mp4': '.mp4',
+  'video/quicktime': '.mov',
+  'video/webm': '.webm'
 };
+
+const MAX_BYTES = 200 * 1024 * 1024; // 200 MB
 
 export interface IngestInput {
   filename: string;
@@ -58,9 +68,9 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
     await safeUnlink(tempPath);
     throw new IngestError(400, 'Empty file');
   }
-  if (bytes > 50 * 1024 * 1024) {
+  if (bytes > MAX_BYTES) {
     await safeUnlink(tempPath);
-    throw new IngestError(413, 'File too large (max 50MB)');
+    throw new IngestError(413, 'File too large (max 200MB)');
   }
 
   // 2. Dedup
@@ -80,8 +90,11 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
   const finalPath = originalPathFor(sha256, ext);
   await moveToOriginal(tempPath, finalPath);
 
-  // 4. Thumbnails
-  const { width, height, thumbPath, wallPath, takenAt } = await makeThumbnails(finalPath, sha256);
+  // 4. Posters / thumbnails
+  const isVideo = input.mime.startsWith('video/');
+  const { width, height, thumbPath, wallPath, takenAt } = isVideo
+    ? await makeVideoPosters(finalPath, sha256)
+    : await makeThumbnails(finalPath, sha256);
 
   // 5. Insert row
   const [row] = await db
@@ -115,6 +128,7 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
     uploadedAt: row.uploadedAt.toISOString(),
     takenAt: takenAt?.toISOString() ?? null,
     reactions: {},
+    mime: input.mime,
     thumb: `/api/photos/${row.id}/file?v=thumb`,
     wall: `/api/photos/${row.id}/file?v=wall`,
     original: `/api/photos/${row.id}/file?v=original`
