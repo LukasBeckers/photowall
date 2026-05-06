@@ -96,5 +96,8 @@ async function probe(
 }
 
 async function runFfmpeg(args: string[]): Promise<void> {
-  await exec('ffmpeg', args, { timeout: 60_000 });
+  // Long 4K clips near the 200 MB cap can take a while to demux/seek into.
+  // 4 minutes is generous; if we ever hit it the 500 message surfaces in
+  // the upload card so the user can see what happened.
+  await exec('ffmpeg', args, { timeout: 240_000 });
 }
