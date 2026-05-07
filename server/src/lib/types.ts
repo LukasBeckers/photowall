@@ -12,6 +12,9 @@ export interface PhotoSummary {
   thumb: string;
   wall: string;
   original: string;
+  // Smaller H.264 MP4 used by the wall instead of the original. Only set
+  // for videos. The wall page falls back to `original` if absent.
+  wallVideo?: string;
   speed: number; // playback rate; 1.0 = normal. Only meaningful for videos.
 }
 

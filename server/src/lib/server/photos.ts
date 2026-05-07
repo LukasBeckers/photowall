@@ -9,7 +9,7 @@ import {
   moveToOriginal
 } from './storage';
 import { makeThumbnails } from './thumbs';
-import { makeVideoPosters } from './video';
+import { makeVideoPosters, makeWallPreview } from './video';
 import { hub } from './sse';
 import type { PhotoSummary } from '$lib/types';
 
@@ -96,6 +96,17 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
     ? await makeVideoPosters(finalPath, sha256)
     : await makeThumbnails(finalPath, sha256);
 
+  // For videos, also encode a small H.264 preview the wall plays instead of
+  // the original. Failure here is non-fatal — the wall falls back to the
+  // original file, just at higher decode cost.
+  if (isVideo) {
+    try {
+      await makeWallPreview(finalPath, sha256);
+    } catch (e) {
+      console.error('makeWallPreview failed (continuing):', (e as Error).message);
+    }
+  }
+
   // 5. Insert row
   const [row] = await db
     .insert(schema.photos)
@@ -132,7 +143,8 @@ export async function ingestPhoto(input: IngestInput): Promise<IngestResult> {
     speed: 1,
     thumb: `/api/photos/${row.id}/file?v=thumb`,
     wall: `/api/photos/${row.id}/file?v=wall`,
-    original: `/api/photos/${row.id}/file?v=original`
+    original: `/api/photos/${row.id}/file?v=original`,
+    wallVideo: isVideo ? `/api/photos/${row.id}/file?v=wall_video` : undefined
   };
   hub.broadcast({ type: 'photo.added', photo: summary });
 

@@ -5,9 +5,9 @@ import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
 import type { RequestHandler } from './$types';
 import { db, schema } from '$lib/server/db';
-import { streamFile } from '$lib/server/storage';
+import { streamFile, wallVideoPathFor, fileExists } from '$lib/server/storage';
 
-const VARIANTS = new Set(['thumb', 'wall', 'original']);
+const VARIANTS = new Set(['thumb', 'wall', 'original', 'wall_video']);
 
 function parseRange(header: string, size: number): { start: number; end: number } | null {
   // Only accept simple byte ranges. Spec: "bytes=START-END" or "bytes=START-".
@@ -33,14 +33,36 @@ export const GET: RequestHandler = async ({ params, url, locals, request }) => {
   if (!row) throw error(404, 'Not found');
   if (row.hiddenAt && !locals.admin) throw error(404, 'Not found');
 
-  const path =
-    variant === 'original' ? row.originalPath : variant === 'wall' ? row.wallPath : row.thumbPath;
-  const mime =
-    variant === 'original' ? row.mime : 'image/jpeg';
+  let path: string;
+  let mime: string;
+  if (variant === 'original') {
+    path = row.originalPath;
+    mime = row.mime;
+  } else if (variant === 'wall') {
+    path = row.wallPath;
+    mime = 'image/jpeg';
+  } else if (variant === 'wall_video') {
+    if (!row.mime.startsWith('video/')) throw error(400, 'wall_video only for videos');
+    const previewPath = wallVideoPathFor(row.sha256);
+    if (await fileExists(previewPath)) {
+      path = previewPath;
+      mime = 'video/mp4';
+    } else {
+      // Backfill not yet run — fall back to the original so the wall keeps working.
+      path = row.originalPath;
+      mime = row.mime;
+    }
+  } else {
+    path = row.thumbPath;
+    mime = 'image/jpeg';
+  }
   const download = url.searchParams.get('download') === '1';
-  const filename = `${row.id}${variant === 'original' ? extFromMime(row.mime) : '.jpg'}`;
+  const filename = `${row.id}${variant === 'original' ? extFromMime(row.mime) : variant === 'wall_video' ? '.mp4' : '.jpg'}`;
 
   const st = await stat(path);
+  // Originals get a short private cache (admin-downloadable, large). Derived
+  // variants (thumb/wall/wall_video) are content-addressed by sha256, so they
+  // can be aggressively immutable-cached.
   const cache =
     variant === 'original'
       ? 'private, max-age=300'

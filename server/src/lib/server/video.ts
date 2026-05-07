@@ -3,7 +3,7 @@
 // further changes downstream.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { thumbPathFor, wallPathFor, fileExists } from './storage';
+import { thumbPathFor, wallPathFor, wallVideoPathFor, fileExists } from './storage';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
@@ -100,4 +100,40 @@ async function runFfmpeg(args: string[]): Promise<void> {
   // 4 minutes is generous; if we ever hit it the 500 message surfaces in
   // the upload card so the user can see what happened.
   await exec('ffmpeg', args, { timeout: 240_000 });
+}
+
+/**
+ * Encode a small H.264 MP4 the wall plays instead of the original. At typical
+ * wall cell sizes (200-400 CSS px) on a 4K TV, 720p is visually
+ * indistinguishable from a 4K source — but lets the iGPU decode many tiles
+ * concurrently instead of choking on simultaneous 4K streams. Idempotent.
+ */
+export async function makeWallPreview(originalPath: string, sha256: string): Promise<string> {
+  const out = wallVideoPathFor(sha256);
+  if (await fileExists(out)) return out;
+  await mkdir(dirname(out), { recursive: true });
+  await exec(
+    'ffmpeg',
+    [
+      '-y',
+      '-i', originalPath,
+      // Scale the long edge down to 1280 (or 720 if portrait), keep aspect.
+      // Chained scale=trunc(iw/2)*2 rounds to even dimensions — libx264 with
+      // yuv420p (required for Safari) refuses odd width/height.
+      '-vf', "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+      '-c:v', 'libx264',
+      '-preset', 'veryfast',
+      '-crf', '28',
+      // Drop audio — wall is muted, saves decode + bytes.
+      '-an',
+      // moov atom up front so playback can begin during download.
+      '-movflags', '+faststart',
+      // yuv420p is the universally-decodable pixel format (Safari needs it).
+      '-pix_fmt', 'yuv420p',
+      out
+    ],
+    // Plenty of headroom for long 4K clips on slow CPUs.
+    { timeout: 600_000 }
+  );
+  return out;
 }

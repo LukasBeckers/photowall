@@ -51,7 +51,8 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     speed: p.playbackSpeed,
     thumb: `/api/photos/${p.id}/file?v=thumb`,
     wall: `/api/photos/${p.id}/file?v=wall`,
-    original: `/api/photos/${p.id}/file?v=original`
+    original: `/api/photos/${p.id}/file?v=original`,
+    wallVideo: p.mime.startsWith('video/') ? `/api/photos/${p.id}/file?v=wall_video` : undefined
   }));
 
   // Always derive the base URL from the request. Caddy passes X-Forwarded-Proto

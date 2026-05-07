@@ -77,6 +77,13 @@ export function wallPathFor(sha256: string): string {
   return join(PATHS.wall, `${sha256}.jpg`);
 }
 
+// Small H.264 MP4 used as the wall video src — see makeWallPreview.
+// Living next to the JPEG poster keeps the layout simple and lets one
+// `du data/wall/` show the full wall-display footprint at a glance.
+export function wallVideoPathFor(sha256: string): string {
+  return join(PATHS.wall, `${sha256}.mp4`);
+}
+
 export async function writeFileSafe(path: string, data: Buffer): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, data);

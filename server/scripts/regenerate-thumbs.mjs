@@ -26,7 +26,7 @@ if (!url) {
 const sql = postgres(url, { max: 1 });
 
 const rows = await sql`
-  SELECT id, mime, original_path, thumb_path, wall_path
+  SELECT id, sha256, mime, original_path, thumb_path, wall_path
   FROM photos
   ORDER BY uploaded_at DESC
 `;
@@ -108,6 +108,28 @@ for (const row of rows) {
       if (row.wall_path !== row.thumb_path) {
         await copyFile(row.thumb_path, row.wall_path);
       }
+
+      // Encode the wall preview MP4 (mirrors makeWallPreview in video.ts).
+      // Path lives next to the JPEG poster: <wall_dir>/<sha>.mp4.
+      const wallDir = dirname(row.wall_path);
+      const previewPath = `${wallDir}/${row.sha256}.mp4`;
+      await safeUnlink(previewPath);
+      await exec(
+        'ffmpeg',
+        [
+          '-y',
+          '-i', row.original_path,
+          '-vf', "scale='min(1280,iw)':'min(720,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '28',
+          '-an',
+          '-movflags', '+faststart',
+          '-pix_fmt', 'yuv420p',
+          previewPath
+        ],
+        { timeout: 600_000 }
+      );
     } else {
       const buf = await readFile(row.original_path);
       await sharp(buf)

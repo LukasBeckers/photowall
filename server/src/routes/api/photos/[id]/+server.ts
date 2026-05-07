@@ -41,7 +41,8 @@ export const GET: RequestHandler = async ({ params, locals }) => {
     speed: row.playbackSpeed,
     thumb: `/api/photos/${row.id}/file?v=thumb`,
     wall: `/api/photos/${row.id}/file?v=wall`,
-    original: `/api/photos/${row.id}/file?v=original`
+    original: `/api/photos/${row.id}/file?v=original`,
+    wallVideo: row.mime.startsWith('video/') ? `/api/photos/${row.id}/file?v=wall_video` : undefined
   });
 };
 

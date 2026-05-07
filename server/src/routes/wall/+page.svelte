@@ -205,12 +205,13 @@
             <!-- svelte-ignore a11y-media-has-caption -->
             <video
               use:videoRate={item.photo.speed}
-              src={item.photo.original}
+              src={item.photo.wallVideo ?? item.photo.original}
               poster={item.photo.wall}
               autoplay
               loop
               muted
               playsinline
+              preload="metadata"
             ></video>
           {:else}
             <img src={item.photo.wall} alt="" />
