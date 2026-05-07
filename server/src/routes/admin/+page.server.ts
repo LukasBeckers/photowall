@@ -20,6 +20,7 @@ export const load: PageServerLoad = async () => {
     .limit(500);
 
   const cellSize = await getSetting<number>('wall_cell_size', 200);
+  const maxCells = await getSetting<number>('wall_max_cells', 40);
 
   return {
     photos: rows.map((r) => ({
@@ -27,6 +28,7 @@ export const load: PageServerLoad = async () => {
       uploadedAt: r.uploadedAt.toISOString(),
       hiddenAt: r.hiddenAt?.toISOString() ?? null
     })),
-    cellSize
+    cellSize,
+    maxCells
   };
 };

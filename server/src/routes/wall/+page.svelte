@@ -15,10 +15,6 @@
   const PROMOTE_THRESHOLD = 3; // total reactions to be a 2x2 candidate
   const PROMOTE_PROB = 0.3;
   const PULSE_MS = 800;
-  // Hard cap on rendered tiles. Caps both the in-memory items[] and the
-  // visible[] derived list — keeps decode/composite cost bounded even at
-  // tiny cell sizes that would otherwise produce 100+ tiles on a 4K TV.
-  const MAX_ITEMS = 40;
 
   let items: Item[] = [];
   let pulses: Map<string, number> = new Map();
@@ -29,6 +25,9 @@
   let qrSvg = '';
   let partyPassword = '';
   let cellSize = 200;
+  // Hard cap on rendered tiles. Bounds both items[] and visible[] so decode/
+  // composite cost stays predictable. Live-updated via the admin slider.
+  let maxItems = 40;
 
   let cols = 6;
   let rows = 2;
@@ -40,7 +39,7 @@
     for (const it of items) {
       const u = it.size === 2 ? 4 : 1;
       if (used + u > capacity) break;
-      if (out.length >= MAX_ITEMS) break;
+      if (out.length >= maxItems) break;
       out.push(it);
       used += u;
     }
@@ -75,7 +74,7 @@
       }
     }
     if (toPlace) out.push(toPlace);
-    items = out.slice(0, MAX_ITEMS);
+    items = out.slice(0, maxItems);
   }
 
   function applyReactionChange(photoId: string, counts: Record<string, number>) {
@@ -156,8 +155,9 @@
   onMount(async () => {
     const initial = await api('/api/wall/initial').then((r) => r.json());
     const photos = (initial.photos as PhotoSummary[]) ?? [];
+    if (typeof initial.maxCells === 'number') maxItems = initial.maxCells;
     items = photos
-      .slice(0, MAX_ITEMS)
+      .slice(0, maxItems)
       .map((photo) => ({ photo, size: 1 as const, key: ++seq }));
     displayUrl = (initial.displayUrl ?? '').replace(/^https?:\/\//, '');
     qrSvg = initial.qr ?? '';
@@ -175,9 +175,17 @@
         else if (msg.type === 'reaction.changed') applyReactionChange(msg.photoId, msg.counts);
         else if (msg.type === 'photo.hidden') applyHidden(msg.photoId);
         else if (msg.type === 'photo.speed_changed') applySpeedChange(msg.photoId, msg.speed);
-        else if (msg.type === 'settings.changed' && typeof msg.settings?.wall_cell_size === 'number') {
-          cellSize = msg.settings.wall_cell_size;
-          recompute();
+        else if (msg.type === 'settings.changed') {
+          if (typeof msg.settings?.wall_cell_size === 'number') {
+            cellSize = msg.settings.wall_cell_size;
+            recompute();
+          }
+          if (typeof msg.settings?.wall_max_cells === 'number') {
+            maxItems = msg.settings.wall_max_cells;
+            // If the cap shrank, trim items[] so the in-memory pool also
+            // bounds itself. visible[] picks up the change on next reactive run.
+            if (items.length > maxItems) items = items.slice(0, maxItems);
+          }
         }
       } catch {
         // ignore

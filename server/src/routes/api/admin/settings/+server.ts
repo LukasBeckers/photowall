@@ -20,6 +20,10 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
     const v = Number(body.value);
     if (!Number.isFinite(v) || v < 60 || v > 1200) throw error(400, 'cell size out of range');
     await putSetting(key, Math.round(v));
+  } else if (key === 'wall_max_cells') {
+    const v = Number(body.value);
+    if (!Number.isFinite(v) || v < 4 || v > 200) throw error(400, 'max cells out of range');
+    await putSetting(key, Math.round(v));
   } else {
     throw error(400, 'Unknown setting');
   }

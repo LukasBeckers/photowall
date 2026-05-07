@@ -12,6 +12,10 @@ import { getSetting } from '$lib/server/settings';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
   if (!locals.session) throw error(401, 'Unauthorized');
+
+  const cellSize = await getSetting<number>('wall_cell_size', 200);
+  const maxCells = await getSetting<number>('wall_max_cells', 40);
+
   const rows = await db
     .select({
       id: schema.photos.id,
@@ -36,7 +40,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     .from(schema.photos)
     .where(isNull(schema.photos.hiddenAt))
     .orderBy(desc(schema.photos.uploadedAt))
-    .limit(60);
+    .limit(maxCells);
 
   const photos = rows.map((p) => ({
     id: p.id,
@@ -63,7 +67,6 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   const loginUrl = `${base}/login?t=${token}`;
   const qr = await renderQrSvg(loginUrl);
   const partyPassword = process.env.PARTY_PASSWORD ?? '';
-  const cellSize = await getSetting<number>('wall_cell_size', 200);
 
-  return json({ photos, loginUrl, qr, displayUrl: base, partyPassword, cellSize });
+  return json({ photos, loginUrl, qr, displayUrl: base, partyPassword, cellSize, maxCells });
 };

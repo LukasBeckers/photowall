@@ -7,7 +7,9 @@
   let filter: 'all' | 'guest' | 'sdcard' | 'hidden' = 'all';
   let busy: Set<string> = new Set();
   let cellSize = data.cellSize;
+  let maxCells = data.maxCells;
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let maxCellsTimer: ReturnType<typeof setTimeout> | null = null;
 
   function onCellSizeInput() {
     if (saveTimer) clearTimeout(saveTimer);
@@ -16,6 +18,17 @@
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'wall_cell_size', value: cellSize })
+      });
+    }, 200);
+  }
+
+  function onMaxCellsInput() {
+    if (maxCellsTimer) clearTimeout(maxCellsTimer);
+    maxCellsTimer = setTimeout(async () => {
+      await api('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ key: 'wall_max_cells', value: maxCells })
       });
     }, 200);
   }
@@ -96,6 +109,18 @@
         on:input={onCellSizeInput}
       />
       <span class="hint">smaller = more photos on the wall · changes apply live</span>
+    </label>
+    <label class="slider">
+      <span class="label">Max wall tiles: <strong>{maxCells}</strong></span>
+      <input
+        type="range"
+        min="4"
+        max="120"
+        step="2"
+        bind:value={maxCells}
+        on:input={onMaxCellsInput}
+      />
+      <span class="hint">hard cap on rendered tiles · lower = better TV/laptop performance</span>
     </label>
   </section>
 
