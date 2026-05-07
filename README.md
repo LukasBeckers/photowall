@@ -87,6 +87,21 @@ image, skips anything it's seen before, and uploads new ones via bearer-token
 auth. State is persisted to `./watcher-state/state.db`, so you can unplug and
 re-insert the same card without duplicate uploads.
 
+## Maintenance
+
+### Regenerate thumbnails
+
+If you bump the dimension constants in `server/src/lib/server/thumbs.ts`, run
+this once to refresh existing photos (new uploads pick up the new sizes
+automatically):
+
+```bash
+docker compose exec app node scripts/regenerate-thumbs.mjs
+```
+
+It iterates every photo, deletes the old thumb + wall files, and rebuilds
+them. Idempotent — safe to re-run if it errors on a few files.
+
 ## Implementation status
 
 - [x] Phase 1 — Skeleton (compose, db, sveltekit boots, /health works)

@@ -7,8 +7,11 @@ import {
   fileExists
 } from './storage';
 
-const GALLERY_MAX = 400;
-const WALL_MAX = 1280;
+// Sized for hi-DPI displays (DPR 2-3 phones, 4K TVs at the slider's high end).
+// At cell size 1000 CSS px on a DPR=2 panel that's 2000 physical px, so the
+// 2560-wide wall variant has just enough headroom without being absurd.
+const GALLERY_MAX = 800;
+const WALL_MAX = 2560;
 
 export interface ThumbResult {
   width: number;
