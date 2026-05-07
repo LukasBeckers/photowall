@@ -15,6 +15,10 @@
   const PROMOTE_THRESHOLD = 3; // total reactions to be a 2x2 candidate
   const PROMOTE_PROB = 0.3;
   const PULSE_MS = 800;
+  // Hard cap on rendered tiles. Caps both the in-memory items[] and the
+  // visible[] derived list — keeps decode/composite cost bounded even at
+  // tiny cell sizes that would otherwise produce 100+ tiles on a 4K TV.
+  const MAX_ITEMS = 40;
 
   let items: Item[] = [];
   let pulses: Map<string, number> = new Map();
@@ -36,6 +40,7 @@
     for (const it of items) {
       const u = it.size === 2 ? 4 : 1;
       if (used + u > capacity) break;
+      if (out.length >= MAX_ITEMS) break;
       out.push(it);
       used += u;
     }
@@ -70,8 +75,7 @@
       }
     }
     if (toPlace) out.push(toPlace);
-    // Cap to a reasonable max so memory doesn't grow forever.
-    items = out.slice(0, 200);
+    items = out.slice(0, MAX_ITEMS);
   }
 
   function applyReactionChange(photoId: string, counts: Record<string, number>) {
@@ -152,7 +156,9 @@
   onMount(async () => {
     const initial = await api('/api/wall/initial').then((r) => r.json());
     const photos = (initial.photos as PhotoSummary[]) ?? [];
-    items = photos.map((photo) => ({ photo, size: 1 as const, key: ++seq }));
+    items = photos
+      .slice(0, MAX_ITEMS)
+      .map((photo) => ({ photo, size: 1 as const, key: ++seq }));
     displayUrl = (initial.displayUrl ?? '').replace(/^https?:\/\//, '');
     qrSvg = initial.qr ?? '';
     partyPassword = initial.partyPassword ?? '';
