@@ -5,6 +5,7 @@
   import { REACTION_EMOJI } from '$lib/emoji';
   import { isVideo } from '$lib/types';
   import type { PhotoSummary } from '$lib/types';
+  import { api } from '$lib/api';
 
   type Item = { key: number; photo: PhotoSummary; size: 1 | 2 };
 
@@ -149,7 +150,7 @@
   }
 
   onMount(async () => {
-    const initial = await fetch('/api/wall/initial').then((r) => r.json());
+    const initial = await api('/api/wall/initial').then((r) => r.json());
     const photos = (initial.photos as PhotoSummary[]) ?? [];
     items = photos.map((photo) => ({ photo, size: 1 as const, key: ++seq }));
     displayUrl = (initial.displayUrl ?? '').replace(/^https?:\/\//, '');

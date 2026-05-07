@@ -4,6 +4,7 @@
   import type { PhotoSummary, PhotoListResponse } from '$lib/types';
   import { REACTION_EMOJI } from '$lib/emoji';
   import { isVideo } from '$lib/types';
+  import { api } from '$lib/api';
   import PhotoModal from '$lib/ui/PhotoModal.svelte';
 
   export let data: PageData;
@@ -52,7 +53,7 @@
     try {
       const url = new URL('/api/photos', window.location.origin);
       if (before) url.searchParams.set('before', before);
-      const res = await fetch(url);
+      const res = await api(url);
       if (!res.ok) throw new Error('list failed');
       const data = (await res.json()) as PhotoListResponse;
       photos = before ? [...photos, ...data.photos] : data.photos;
@@ -65,7 +66,7 @@
 
   async function refreshMyReactions(ids: string[]) {
     if (ids.length === 0) return;
-    const res = await fetch('/api/me/reactions?ids=' + ids.join(','));
+    const res = await api('/api/me/reactions?ids=' + ids.join(','));
     if (!res.ok) return;
     const json = (await res.json()) as { reactions: Record<string, string[]> };
     const next = new Map(myReactions);
@@ -107,7 +108,7 @@
     for (const e of ok) fd.append('files', e.file);
 
     try {
-      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const res = await api('/api/upload', { method: 'POST', body: fd });
 
       if (!res.ok) {
         // Try to read the server's error text so we can show it.
@@ -184,7 +185,7 @@
     const previous = photo.speed;
     applySpeed(photo.id, speed);
     try {
-      const res = await fetch(`/api/photos/${photo.id}/speed`, {
+      const res = await api(`/api/photos/${photo.id}/speed`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ speed })
@@ -208,7 +209,7 @@
     applyCounts(photo.id, optimistic);
 
     try {
-      const res = await fetch(`/api/photos/${photo.id}/react`, {
+      const res = await api(`/api/photos/${photo.id}/react`, {
         method: on ? 'POST' : 'DELETE',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ emoji })

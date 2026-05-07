@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types';
+  import { api } from '$lib/api';
   export let data: PageData;
 
   let photos = data.photos;
@@ -11,7 +12,7 @@
   function onCellSizeInput() {
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
-      await fetch('/api/admin/settings', {
+      await api('/api/admin/settings', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ key: 'wall_cell_size', value: cellSize })
@@ -29,7 +30,7 @@
     busy.add(id);
     busy = busy;
     try {
-      const res = await fetch(`/api/admin/photos/${id}`, {
+      const res = await api(`/api/admin/photos/${id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ hidden: hide })
@@ -49,7 +50,7 @@
     busy.add(id);
     busy = busy;
     try {
-      const res = await fetch(`/api/admin/photos/${id}`, { method: 'DELETE' });
+      const res = await api(`/api/admin/photos/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       photos = photos.filter((p) => p.id !== id);
     } finally {
@@ -61,7 +62,7 @@
   let qrUrl: string | null = null;
   let qrSvg: string | null = null;
   async function generateQrToken(label: string) {
-    const res = await fetch('/api/admin/qr-token', {
+    const res = await api('/api/admin/qr-token', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ label })
