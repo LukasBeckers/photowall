@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
   import { REACTION_EMOJI } from '$lib/emoji';
   import { isVideo } from '$lib/types';
   import type { PhotoSummary } from '$lib/types';
@@ -15,6 +13,11 @@
   const PROMOTE_THRESHOLD = 3; // total reactions to be a 2x2 candidate
   const PROMOTE_PROB = 0.3;
   const PULSE_MS = 800;
+  // In-memory pool. Larger than any reasonable maxItems so that growing the
+  // admin slider expands visible[] without needing a refresh, and so the
+  // sticky-bubble cascade has slack at the back instead of dropping a
+  // currently-playing video tile every time a new photo arrives.
+  const POOL_MAX = 200;
 
   let items: Item[] = [];
   let pulses: Map<string, number> = new Map();
@@ -74,7 +77,7 @@
       }
     }
     if (toPlace) out.push(toPlace);
-    items = out.slice(0, maxItems);
+    items = out.slice(0, POOL_MAX);
   }
 
   function applyReactionChange(photoId: string, counts: Record<string, number>) {
@@ -157,7 +160,7 @@
     const photos = (initial.photos as PhotoSummary[]) ?? [];
     if (typeof initial.maxCells === 'number') maxItems = initial.maxCells;
     items = photos
-      .slice(0, maxItems)
+      .slice(0, POOL_MAX)
       .map((photo) => ({ photo, size: 1 as const, key: ++seq }));
     displayUrl = (initial.displayUrl ?? '').replace(/^https?:\/\//, '');
     qrSvg = initial.qr ?? '';
@@ -181,10 +184,9 @@
             recompute();
           }
           if (typeof msg.settings?.wall_max_cells === 'number') {
+            // Pool stays at POOL_MAX; visible[] picks up the new cap on its
+            // next reactive run. Growing or shrinking is symmetrical now.
             maxItems = msg.settings.wall_max_cells;
-            // If the cap shrank, trim items[] so the in-memory pool also
-            // bounds itself. visible[] picks up the change on next reactive run.
-            if (items.length > maxItems) items = items.slice(0, maxItems);
           }
         }
       } catch {
@@ -210,11 +212,7 @@
   <div class="grid">
     {#each visible as item (item.key)}
       <div class="slot" class:size-2={item.size === 2}>
-        <div
-          class="cell"
-          in:scale={{ duration: 500, start: 0.9, easing: quintOut }}
-          out:fade={{ duration: 250 }}
-        >
+        <div class="cell">
           {#if isVideo(item.photo)}
             <!-- svelte-ignore a11y-media-has-caption -->
             <video

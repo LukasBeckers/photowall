@@ -16,6 +16,12 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   const cellSize = await getSetting<number>('wall_cell_size', 200);
   const maxCells = await getSetting<number>('wall_max_cells', 40);
 
+  // Always select up to 200 photos so the wall's in-memory pool can grow
+  // beyond the current slider value without a refresh. The client caps
+  // visible[] at maxCells; the extra rows are slack for sticky-bubble +
+  // slider-grow.
+  const POOL_MAX = 200;
+
   const rows = await db
     .select({
       id: schema.photos.id,
@@ -40,7 +46,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     .from(schema.photos)
     .where(isNull(schema.photos.hiddenAt))
     .orderBy(desc(schema.photos.uploadedAt))
-    .limit(maxCells);
+    .limit(POOL_MAX);
 
   const photos = rows.map((p) => ({
     id: p.id,
