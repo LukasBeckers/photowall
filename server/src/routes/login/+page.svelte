@@ -42,15 +42,13 @@
     {/if}
 
     <label>
-      <span>Your name</span>
+      <span>Your name <em class="opt">(optional — we'll pick one for you)</em></span>
       <input
         type="text"
         name="display_name"
         autocomplete="nickname"
         maxlength="40"
         value={form?.displayName ?? ''}
-        required
-        autofocus
       />
     </label>
 
@@ -95,6 +93,12 @@
     gap: 0.25rem;
     font-size: 0.85rem;
     color: var(--muted);
+  }
+  .opt {
+    color: var(--muted);
+    font-style: normal;
+    font-size: 0.75rem;
+    opacity: 0.7;
   }
   input {
     background: var(--card);

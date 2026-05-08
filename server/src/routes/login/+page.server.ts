@@ -6,6 +6,7 @@ import {
   setSessionCookie
 } from '$lib/server/auth';
 import { verifyToken } from '$lib/server/token';
+import { randomDisplayName } from '$lib/server/names';
 
 export const load: PageServerLoad = ({ locals, url }) => {
   // If already logged in, bounce.
@@ -32,16 +33,19 @@ export const actions: Actions = {
       return fail(401, { error: 'Wrong password.', displayName, hasToken: false });
     }
 
-    if (displayName.length < 1 || displayName.length > 40) {
+    if (displayName.length > 40) {
       return fail(400, {
-        error: 'Pick a name between 1 and 40 characters.',
+        error: 'Name too long (max 40 characters).',
         displayName,
         hasToken: hasValidToken
       });
     }
+    // Some phones don't pop the keyboard for the name field; let blank
+    // submissions through with a fun auto-generated name.
+    const finalName = displayName.length === 0 ? randomDisplayName() : displayName;
 
-    const { id } = await createSession(displayName);
-    setSessionCookie(cookies, id, displayName);
+    const { id } = await createSession(finalName);
+    setSessionCookie(cookies, id, finalName);
 
     throw redirect(303, safeNext(next));
   }
