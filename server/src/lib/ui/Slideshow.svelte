@@ -68,17 +68,21 @@
 <style>
   .slideshow {
     flex: 1;
+    /* min-height: 0 is critical inside a flex column — without it, percentage
+       heights on descendants (like the slide / image) don't resolve and the
+       image renders at intrinsic size, clipping against `overflow: hidden`.
+       This was cropping tall portrait photos from the top before. */
+    min-height: 0;
     position: relative;
     overflow: hidden;
     background: #000;
-    display: grid;
-    place-items: center;
   }
   .slide {
     position: absolute;
     inset: 0;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     /* Brief opacity fade between slides — opacity-only is GPU-cheap and
        doesn't force per-frame repaint of the video like transform would. */
     animation: fadein 200ms ease-out;
@@ -89,10 +93,12 @@
   }
   .slide img,
   .slide video {
-    max-width: 100vw;
-    max-height: 100%;
-    width: auto;
-    height: auto;
+    /* Fill the slot, then contain the actual content within those bounds.
+       This is the canonical aspect-preserving fit; works for any aspect
+       ratio (portrait phone photos, landscape clips, square) without
+       cropping or distorting. */
+    width: 100%;
+    height: 100%;
     object-fit: contain;
     display: block;
   }
