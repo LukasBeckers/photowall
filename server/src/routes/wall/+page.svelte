@@ -298,6 +298,9 @@
             {:else}
               <img src={item.photo.wall} alt="" />
             {/if}
+            {#if item.photo.uploader}
+              <div class="who">{item.photo.uploader}</div>
+            {/if}
             <div class="overlay">
               {#each REACTION_EMOJI as emoji}
                 {#if item.photo.reactions[emoji]}
@@ -404,6 +407,23 @@
     flex-wrap: wrap;
     justify-content: flex-end;
     max-width: calc(100% - 12px);
+  }
+  .who {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    max-width: calc(100% - 12px);
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    backdrop-filter: blur(4px);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
   .r {
     background: rgba(0, 0, 0, 0.65);

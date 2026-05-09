@@ -58,6 +58,9 @@
         {:else}
           <img src={current.photo.wall} alt="" />
         {/if}
+        {#if current.photo.uploader}
+          <div class="who">{current.photo.uploader}</div>
+        {/if}
       </div>
     {/key}
   {:else}
@@ -101,6 +104,22 @@
     height: 100%;
     object-fit: contain;
     display: block;
+  }
+  .who {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 1.1rem;
+    backdrop-filter: blur(4px);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    max-width: calc(100% - 2rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .empty {
     color: rgba(255, 255, 255, 0.5);
