@@ -37,6 +37,22 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
     const v = Number(body.value);
     if (!Number.isFinite(v) || v < 1 || v > 60) throw error(400, 'minutes out of range (1-60)');
     await putSetting(key, Math.round(v));
+  } else if (key === 'wifi_show') {
+    if (typeof body.value !== 'boolean') throw error(400, 'wifi_show must be boolean');
+    await putSetting(key, body.value);
+  } else if (key === 'wifi_ssid') {
+    if (typeof body.value !== 'string') throw error(400, 'wifi_ssid must be a string');
+    if (body.value.length > 64) throw error(400, 'wifi_ssid too long (max 64)');
+    await putSetting(key, body.value);
+  } else if (key === 'wifi_password') {
+    if (typeof body.value !== 'string') throw error(400, 'wifi_password must be a string');
+    if (body.value.length > 128) throw error(400, 'wifi_password too long (max 128)');
+    await putSetting(key, body.value);
+  } else if (key === 'wifi_auth') {
+    if (body.value !== 'WPA' && body.value !== 'WEP' && body.value !== 'nopass') {
+      throw error(400, 'wifi_auth must be WPA | WEP | nopass');
+    }
+    await putSetting(key, body.value);
   } else {
     throw error(400, 'Unknown setting');
   }

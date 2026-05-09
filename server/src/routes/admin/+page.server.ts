@@ -25,6 +25,10 @@ export const load: PageServerLoad = async () => {
   const slideshowSeconds = await getSetting<number>('wall_slideshow_seconds', 6);
   const autoMosaicMin = await getSetting<number>('wall_auto_mosaic_min', 5);
   const autoSlideshowMin = await getSetting<number>('wall_auto_slideshow_min', 5);
+  const wifiShow = await getSetting<boolean>('wifi_show', false);
+  const wifiSsid = await getSetting<string>('wifi_ssid', '');
+  const wifiPassword = await getSetting<string>('wifi_password', '');
+  const wifiAuth = await getSetting<string>('wifi_auth', 'WPA');
 
   return {
     photos: rows.map((r) => ({
@@ -37,6 +41,10 @@ export const load: PageServerLoad = async () => {
     slideshowMode,
     slideshowSeconds,
     autoMosaicMin,
-    autoSlideshowMin
+    autoSlideshowMin,
+    wifiShow,
+    wifiSsid,
+    wifiPassword,
+    wifiAuth
   };
 };

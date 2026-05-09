@@ -12,6 +12,10 @@
   let slideshowSeconds = data.slideshowSeconds;
   let autoMosaicMin = data.autoMosaicMin;
   let autoSlideshowMin = data.autoSlideshowMin;
+  let wifiShow = data.wifiShow;
+  let wifiSsid = data.wifiSsid;
+  let wifiPassword = data.wifiPassword;
+  let wifiAuth: 'WPA' | 'WEP' | 'nopass' = data.wifiAuth as 'WPA' | 'WEP' | 'nopass';
 
   // One debounced putter for every key — avoids hammering the server
   // while sliders are being dragged.
@@ -33,6 +37,10 @@
   function onSlideshowSecondsInput() { debouncedPut('wall_slideshow_seconds', slideshowSeconds); }
   function onAutoMosaicInput() { debouncedPut('wall_auto_mosaic_min', autoMosaicMin); }
   function onAutoSlideshowInput() { debouncedPut('wall_auto_slideshow_min', autoSlideshowMin); }
+  function onWifiShowChange() { debouncedPut('wifi_show', wifiShow, 0); }
+  function onWifiSsidInput() { debouncedPut('wifi_ssid', wifiSsid, 400); }
+  function onWifiPasswordInput() { debouncedPut('wifi_password', wifiPassword, 400); }
+  function onWifiAuthChange() { debouncedPut('wifi_auth', wifiAuth, 0); }
 
   $: visiblePhotos = photos.filter((p) => {
     if (filter === 'all') return true;
@@ -187,6 +195,45 @@
         </label>
       </div>
       <span class="hint">used only when mode is set to Auto · wall-clock synced across all viewers</span>
+    </div>
+  </section>
+
+  <section class="settings">
+    <label class="toggle-row">
+      <input type="checkbox" bind:checked={wifiShow} on:change={onWifiShowChange} />
+      <span class="label">Show Wi-Fi info on wall</span>
+    </label>
+    <span class="hint">when on, the wall banner adds a second QR that joins the network plus the SSID/password as text. SSID must be set for the block to actually render.</span>
+
+    <div class="wifi-fields" class:dim={!wifiShow}>
+      <label class="field">
+        <span>Network name (SSID)</span>
+        <input
+          type="text"
+          maxlength="64"
+          bind:value={wifiSsid}
+          on:input={onWifiSsidInput}
+          placeholder="PartyWiFi"
+        />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input
+          type="text"
+          maxlength="128"
+          bind:value={wifiPassword}
+          on:input={onWifiPasswordInput}
+          placeholder="hunter2"
+        />
+      </label>
+      <label class="field">
+        <span>Encryption</span>
+        <select bind:value={wifiAuth} on:change={onWifiAuthChange}>
+          <option value="WPA">WPA / WPA2 / WPA3</option>
+          <option value="WEP">WEP</option>
+          <option value="nopass">Open (no password)</option>
+        </select>
+      </label>
     </div>
   </section>
 
@@ -371,6 +418,48 @@
   }
   .auto-cycle.dim {
     opacity: 0.55;
+  }
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-row input[type='checkbox'] {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--accent);
+  }
+  .wifi-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.85rem;
+  }
+  .wifi-fields.dim {
+    opacity: 0.55;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .field input[type='text'],
+  .field select {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: 0.4rem;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.95rem;
+  }
+  .field input[type='text']:focus,
+  .field select:focus {
+    outline: none;
+    border-color: var(--accent);
   }
   .primary {
     background: var(--accent);

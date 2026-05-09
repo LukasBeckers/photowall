@@ -9,6 +9,7 @@ import { db, schema } from '$lib/server/db';
 import { issueToken } from '$lib/server/token';
 import { renderQrSvg } from '$lib/server/qr';
 import { getSetting } from '$lib/server/settings';
+import { buildWifiPayload, type WifiAuth } from '$lib/server/wifiQr';
 
 export const GET: RequestHandler = async ({ url, locals }) => {
   if (!locals.session) throw error(401, 'Unauthorized');
@@ -78,6 +79,20 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   const autoMosaicMin = await getSetting<number>('wall_auto_mosaic_min', 5);
   const autoSlideshowMin = await getSetting<number>('wall_auto_slideshow_min', 5);
 
+  // Wi-Fi join QR — only included when admin has both filled in an SSID and
+  // flipped the master toggle on. Otherwise the wall banner shows just the
+  // existing photowall block.
+  const wifiShow = await getSetting<boolean>('wifi_show', false);
+  const wifiSsid = await getSetting<string>('wifi_ssid', '');
+  const wifiPassword = await getSetting<string>('wifi_password', '');
+  const wifiAuth = (await getSetting<string>('wifi_auth', 'WPA')) as WifiAuth;
+  let wifi: { ssid: string; password: string; auth: WifiAuth; qr: string } | null = null;
+  if (wifiShow && wifiSsid !== '') {
+    const payload = buildWifiPayload({ ssid: wifiSsid, password: wifiPassword, auth: wifiAuth });
+    const wifiQr = await renderQrSvg(payload);
+    wifi = { ssid: wifiSsid, password: wifiPassword, auth: wifiAuth, qr: wifiQr };
+  }
+
   return json({
     photos,
     loginUrl,
@@ -89,6 +104,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
     slideshowMode,
     slideshowSeconds,
     autoMosaicMin,
-    autoSlideshowMin
+    autoSlideshowMin,
+    wifi
   });
 };

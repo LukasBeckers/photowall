@@ -29,6 +29,9 @@
   let qrSvg = '';
   let partyPassword = '';
   let cellSize = 200;
+  // Optional Wi-Fi join block in the banner. Populated by /api/wall/initial
+  // when admin has flipped the toggle on with an SSID set.
+  let wifi: { ssid: string; password: string; auth: string; qr: string } | null = null;
   // Hard cap on rendered tiles. Bounds both items[] and visible[] so decode/
   // composite cost stays predictable. Live-updated via the admin slider.
   let maxItems = 40;
@@ -189,6 +192,7 @@
     if (typeof initial.slideshowSeconds === 'number') slideshowSeconds = initial.slideshowSeconds;
     if (typeof initial.autoMosaicMin === 'number') autoMosaicMin = initial.autoMosaicMin;
     if (typeof initial.autoSlideshowMin === 'number') autoSlideshowMin = initial.autoSlideshowMin;
+    wifi = initial.wifi ?? null;
 
     recompute();
     window.addEventListener('resize', recompute);
@@ -225,6 +229,28 @@
           }
           if (typeof msg.settings?.wall_auto_slideshow_min === 'number') {
             autoSlideshowMin = msg.settings.wall_auto_slideshow_min;
+          }
+          // Wi-Fi block: turn off locally without a refetch; turn on with one
+          // so we pick up the freshly-rendered QR SVG (we don't broadcast
+          // the SVG itself in the SSE payload to keep events small).
+          const wifiKeys = [
+            'wifi_show', 'wifi_ssid', 'wifi_password', 'wifi_auth'
+          ] as const;
+          const wifiTouched = wifiKeys.some((k) => k in (msg.settings ?? {}));
+          if (wifiTouched) {
+            const turningOff = msg.settings.wifi_show === false;
+            if (turningOff) {
+              wifi = null;
+            } else {
+              api('/api/wall/initial')
+                .then((r) => r.json())
+                .then((j) => {
+                  wifi = j.wifi ?? null;
+                })
+                .catch(() => {
+                  /* ignore */
+                });
+            }
           }
           // Re-evaluate auto cycle immediately on settings change.
           nowMin = Date.now() / 60_000;
@@ -288,19 +314,35 @@
   {/if}
 
   <div class="banner">
-    {#if qrSvg}
-      <div class="qr">{@html qrSvg}</div>
-    {/if}
-    <div class="banner-text">
-      <div class="prompt">📸 Upload your photos here</div>
-      {#if displayUrl}
-        <div class="url">{displayUrl}</div>
+    <div class="group">
+      {#if qrSvg}
+        <div class="qr">{@html qrSvg}</div>
       {/if}
-      {#if partyPassword}
-        <div class="pw">password: <span class="pw-val">{partyPassword}</span></div>
-      {/if}
-      <div class="hint">…or scan the QR — no password needed</div>
+      <div class="banner-text">
+        <div class="prompt">📸 Upload your photos here</div>
+        {#if displayUrl}
+          <div class="url">{displayUrl}</div>
+        {/if}
+        {#if partyPassword}
+          <div class="pw">password: <span class="pw-val">{partyPassword}</span></div>
+        {/if}
+        <div class="hint">…or scan the QR — no password needed</div>
+      </div>
     </div>
+
+    {#if wifi}
+      <div class="group">
+        <div class="qr">{@html wifi.qr}</div>
+        <div class="banner-text">
+          <div class="prompt">📶 Connect to Wi-Fi</div>
+          <div class="url">{wifi.ssid}</div>
+          {#if wifi.auth !== 'nopass' && wifi.password}
+            <div class="pw">password: <span class="pw-val">{wifi.password}</span></div>
+          {/if}
+          <div class="hint">…or scan the QR to join</div>
+        </div>
+      </div>
+    {/if}
   </div>
 </div>
 
@@ -382,10 +424,16 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 1.25rem;
+    gap: 2.5rem;
     padding: 0.75rem 1.25rem 1rem;
     color: rgba(255, 255, 255, 0.92);
     flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .group {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
   }
   .qr {
     background: #fff;
