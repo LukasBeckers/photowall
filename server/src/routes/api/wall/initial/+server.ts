@@ -73,6 +73,22 @@ export const GET: RequestHandler = async ({ url, locals }) => {
   const loginUrl = `${base}/login?t=${token}`;
   const qr = await renderQrSvg(loginUrl);
   const partyPassword = process.env.PARTY_PASSWORD ?? '';
+  const slideshowMode = await getSetting<string>('wall_slideshow_mode', 'off');
+  const slideshowSeconds = await getSetting<number>('wall_slideshow_seconds', 6);
+  const autoMosaicMin = await getSetting<number>('wall_auto_mosaic_min', 5);
+  const autoSlideshowMin = await getSetting<number>('wall_auto_slideshow_min', 5);
 
-  return json({ photos, loginUrl, qr, displayUrl: base, partyPassword, cellSize, maxCells });
+  return json({
+    photos,
+    loginUrl,
+    qr,
+    displayUrl: base,
+    partyPassword,
+    cellSize,
+    maxCells,
+    slideshowMode,
+    slideshowSeconds,
+    autoMosaicMin,
+    autoSlideshowMin
+  });
 };

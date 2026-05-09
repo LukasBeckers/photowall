@@ -24,6 +24,19 @@ export const PUT: RequestHandler = async ({ request, locals }) => {
     const v = Number(body.value);
     if (!Number.isFinite(v) || v < 4 || v > 200) throw error(400, 'max cells out of range');
     await putSetting(key, Math.round(v));
+  } else if (key === 'wall_slideshow_mode') {
+    if (body.value !== 'off' && body.value !== 'on' && body.value !== 'auto') {
+      throw error(400, 'mode must be off | on | auto');
+    }
+    await putSetting(key, body.value);
+  } else if (key === 'wall_slideshow_seconds') {
+    const v = Number(body.value);
+    if (!Number.isFinite(v) || v < 3 || v > 30) throw error(400, 'seconds out of range (3-30)');
+    await putSetting(key, Math.round(v));
+  } else if (key === 'wall_auto_mosaic_min' || key === 'wall_auto_slideshow_min') {
+    const v = Number(body.value);
+    if (!Number.isFinite(v) || v < 1 || v > 60) throw error(400, 'minutes out of range (1-60)');
+    await putSetting(key, Math.round(v));
   } else {
     throw error(400, 'Unknown setting');
   }

@@ -4,6 +4,7 @@
   import { isVideo } from '$lib/types';
   import type { PhotoSummary } from '$lib/types';
   import { api } from '$lib/api';
+  import Slideshow from '$lib/ui/Slideshow.svelte';
 
   type Item = { key: number; photo: PhotoSummary; size: 1 | 2 };
 
@@ -31,6 +32,24 @@
   // Hard cap on rendered tiles. Bounds both items[] and visible[] so decode/
   // composite cost stays predictable. Live-updated via the admin slider.
   let maxItems = 40;
+
+  // Slideshow / "Diashow" mode. Live-updated via SSE settings.changed; auto
+  // mode flips on a wall-clock timer so all viewers stay in sync.
+  let slideshowMode: 'off' | 'on' | 'auto' = 'off';
+  let slideshowSeconds = 6;
+  let autoMosaicMin = 5;
+  let autoSlideshowMin = 5;
+  let nowMin = Date.now() / 60_000;
+  let modeTicker: ReturnType<typeof setInterval> | null = null;
+
+  $: effectiveMode = (() => {
+    if (slideshowMode === 'on') return 'slideshow' as const;
+    if (slideshowMode === 'off') return 'mosaic' as const;
+    const cycle = autoMosaicMin + autoSlideshowMin;
+    if (cycle <= 0) return 'mosaic' as const;
+    const pos = nowMin % cycle;
+    return pos < autoMosaicMin ? ('mosaic' as const) : ('slideshow' as const);
+  })();
 
   let cols = 6;
   let rows = 2;
@@ -166,9 +185,16 @@
     qrSvg = initial.qr ?? '';
     partyPassword = initial.partyPassword ?? '';
     if (typeof initial.cellSize === 'number') cellSize = initial.cellSize;
+    if (typeof initial.slideshowMode === 'string') slideshowMode = initial.slideshowMode as typeof slideshowMode;
+    if (typeof initial.slideshowSeconds === 'number') slideshowSeconds = initial.slideshowSeconds;
+    if (typeof initial.autoMosaicMin === 'number') autoMosaicMin = initial.autoMosaicMin;
+    if (typeof initial.autoSlideshowMin === 'number') autoSlideshowMin = initial.autoSlideshowMin;
 
     recompute();
     window.addEventListener('resize', recompute);
+
+    // Re-evaluate auto-mode every 30s; cheap, keeps clients aligned.
+    modeTicker = setInterval(() => { nowMin = Date.now() / 60_000; }, 30_000);
 
     es = new EventSource('/api/sse');
     es.onmessage = (e) => {
@@ -188,6 +214,20 @@
             // next reactive run. Growing or shrinking is symmetrical now.
             maxItems = msg.settings.wall_max_cells;
           }
+          if (typeof msg.settings?.wall_slideshow_mode === 'string') {
+            slideshowMode = msg.settings.wall_slideshow_mode as typeof slideshowMode;
+          }
+          if (typeof msg.settings?.wall_slideshow_seconds === 'number') {
+            slideshowSeconds = msg.settings.wall_slideshow_seconds;
+          }
+          if (typeof msg.settings?.wall_auto_mosaic_min === 'number') {
+            autoMosaicMin = msg.settings.wall_auto_mosaic_min;
+          }
+          if (typeof msg.settings?.wall_auto_slideshow_min === 'number') {
+            autoSlideshowMin = msg.settings.wall_auto_slideshow_min;
+          }
+          // Re-evaluate auto cycle immediately on settings change.
+          nowMin = Date.now() / 60_000;
         }
       } catch {
         // ignore
@@ -201,6 +241,7 @@
       window.removeEventListener('resize', recompute);
     }
     if (es) es.close();
+    if (modeTicker) clearInterval(modeTicker);
   });
 </script>
 
@@ -209,38 +250,42 @@
 </svelte:head>
 
 <div class="wall">
-  <div class="grid">
-    {#each visible as item (item.key)}
-      <div class="slot" class:size-2={item.size === 2}>
-        <div class="cell">
-          {#if isVideo(item.photo)}
-            <!-- svelte-ignore a11y-media-has-caption -->
-            <video
-              use:videoRate={item.photo.speed}
-              src={item.photo.wallVideo ?? item.photo.original}
-              poster={item.photo.wall}
-              autoplay
-              loop
-              muted
-              playsinline
-              preload="metadata"
-            ></video>
-          {:else}
-            <img src={item.photo.wall} alt="" />
-          {/if}
-          <div class="overlay">
-            {#each REACTION_EMOJI as emoji}
-              {#if item.photo.reactions[emoji]}
-                <span class="r" class:pulse={pulses.has(item.photo.id)}>
-                  {emoji}{item.photo.reactions[emoji]}
-                </span>
-              {/if}
-            {/each}
+  {#if effectiveMode === 'slideshow'}
+    <Slideshow items={items.map((it) => ({ photo: it.photo, key: it.key }))} seconds={slideshowSeconds} />
+  {:else}
+    <div class="grid">
+      {#each visible as item (item.key)}
+        <div class="slot" class:size-2={item.size === 2}>
+          <div class="cell">
+            {#if isVideo(item.photo)}
+              <!-- svelte-ignore a11y-media-has-caption -->
+              <video
+                use:videoRate={item.photo.speed}
+                src={item.photo.wallVideo ?? item.photo.original}
+                poster={item.photo.wall}
+                autoplay
+                loop
+                muted
+                playsinline
+                preload="metadata"
+              ></video>
+            {:else}
+              <img src={item.photo.wall} alt="" />
+            {/if}
+            <div class="overlay">
+              {#each REACTION_EMOJI as emoji}
+                {#if item.photo.reactions[emoji]}
+                  <span class="r" class:pulse={pulses.has(item.photo.id)}>
+                    {emoji}{item.photo.reactions[emoji]}
+                  </span>
+                {/if}
+              {/each}
+            </div>
           </div>
         </div>
-      </div>
-    {/each}
-  </div>
+      {/each}
+    </div>
+  {/if}
 
   <div class="banner">
     {#if qrSvg}

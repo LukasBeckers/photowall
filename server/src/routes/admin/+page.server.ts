@@ -21,6 +21,10 @@ export const load: PageServerLoad = async () => {
 
   const cellSize = await getSetting<number>('wall_cell_size', 200);
   const maxCells = await getSetting<number>('wall_max_cells', 40);
+  const slideshowMode = await getSetting<string>('wall_slideshow_mode', 'off');
+  const slideshowSeconds = await getSetting<number>('wall_slideshow_seconds', 6);
+  const autoMosaicMin = await getSetting<number>('wall_auto_mosaic_min', 5);
+  const autoSlideshowMin = await getSetting<number>('wall_auto_slideshow_min', 5);
 
   return {
     photos: rows.map((r) => ({
@@ -29,6 +33,10 @@ export const load: PageServerLoad = async () => {
       hiddenAt: r.hiddenAt?.toISOString() ?? null
     })),
     cellSize,
-    maxCells
+    maxCells,
+    slideshowMode,
+    slideshowSeconds,
+    autoMosaicMin,
+    autoSlideshowMin
   };
 };

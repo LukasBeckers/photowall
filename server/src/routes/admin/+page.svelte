@@ -8,30 +8,31 @@
   let busy: Set<string> = new Set();
   let cellSize = data.cellSize;
   let maxCells = data.maxCells;
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
-  let maxCellsTimer: ReturnType<typeof setTimeout> | null = null;
+  let slideshowMode: 'off' | 'on' | 'auto' = data.slideshowMode as 'off' | 'on' | 'auto';
+  let slideshowSeconds = data.slideshowSeconds;
+  let autoMosaicMin = data.autoMosaicMin;
+  let autoSlideshowMin = data.autoSlideshowMin;
 
-  function onCellSizeInput() {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
+  // One debounced putter for every key — avoids hammering the server
+  // while sliders are being dragged.
+  const timers: Record<string, ReturnType<typeof setTimeout> | null> = {};
+  function debouncedPut(key: string, value: unknown, delay = 200) {
+    if (timers[key]) clearTimeout(timers[key]!);
+    timers[key] = setTimeout(async () => {
       await api('/api/admin/settings', {
         method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key: 'wall_cell_size', value: cellSize })
+        body: JSON.stringify({ key, value })
       });
-    }, 200);
+    }, delay);
   }
 
-  function onMaxCellsInput() {
-    if (maxCellsTimer) clearTimeout(maxCellsTimer);
-    maxCellsTimer = setTimeout(async () => {
-      await api('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ key: 'wall_max_cells', value: maxCells })
-      });
-    }, 200);
-  }
+  function onCellSizeInput() { debouncedPut('wall_cell_size', cellSize); }
+  function onMaxCellsInput() { debouncedPut('wall_max_cells', maxCells); }
+  function onSlideshowModeChange() { debouncedPut('wall_slideshow_mode', slideshowMode, 0); }
+  function onSlideshowSecondsInput() { debouncedPut('wall_slideshow_seconds', slideshowSeconds); }
+  function onAutoMosaicInput() { debouncedPut('wall_auto_mosaic_min', autoMosaicMin); }
+  function onAutoSlideshowInput() { debouncedPut('wall_auto_slideshow_min', autoSlideshowMin); }
 
   $: visiblePhotos = photos.filter((p) => {
     if (filter === 'all') return true;
@@ -122,6 +123,71 @@
       />
       <span class="hint">hard cap on rendered tiles · lower = better TV/laptop performance</span>
     </label>
+  </section>
+
+  <section class="settings">
+    <div class="slider">
+      <span class="label">Slideshow mode</span>
+      <div class="mode-row">
+        {#each ['off', 'on', 'auto'] as m (m)}
+          <label class="mode-opt" class:active={slideshowMode === m}>
+            <input
+              type="radio"
+              name="slideshow_mode"
+              value={m}
+              bind:group={slideshowMode}
+              on:change={onSlideshowModeChange}
+            />
+            <span>{m === 'off' ? 'Off (mosaic)' : m === 'on' ? 'On (slideshow)' : 'Auto'}</span>
+          </label>
+        {/each}
+      </div>
+      <span class="hint">Off = wall mosaic · On = single-photo slideshow · Auto = alternates by timer</span>
+    </div>
+
+    <label class="slider">
+      <span class="label">Seconds per slide: <strong>{slideshowSeconds}s</strong></span>
+      <input
+        type="range"
+        min="3"
+        max="30"
+        step="1"
+        bind:value={slideshowSeconds}
+        on:input={onSlideshowSecondsInput}
+      />
+      <span class="hint">applies in On and Auto modes</span>
+    </label>
+
+    <div class="slider auto-cycle" class:dim={slideshowMode !== 'auto'}>
+      <span class="label">Auto cycle</span>
+      <div class="auto-row">
+        <label>
+          Mosaic for
+          <input
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            bind:value={autoMosaicMin}
+            on:input={onAutoMosaicInput}
+          />
+          min
+        </label>
+        <label>
+          then slideshow for
+          <input
+            type="number"
+            min="1"
+            max="60"
+            step="1"
+            bind:value={autoSlideshowMin}
+            on:input={onAutoSlideshowInput}
+          />
+          min
+        </label>
+      </div>
+      <span class="hint">used only when mode is set to Auto · wall-clock synced across all viewers</span>
+    </div>
   </section>
 
   <section class="actions">
@@ -248,6 +314,63 @@
   .slider .hint {
     font-size: 0.8rem;
     color: var(--muted);
+  }
+  .settings .slider + .slider,
+  .settings .slider + .auto-cycle {
+    margin-top: 1.25rem;
+  }
+  .mode-row {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .mode-opt {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease, border-color 0.12s ease;
+  }
+  .mode-opt input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .mode-opt.active {
+    background: rgba(255, 79, 139, 0.15);
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .auto-row {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+  .auto-row label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--fg);
+  }
+  .auto-row input[type='number'] {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    border-radius: 0.4rem;
+    padding: 0.3rem 0.5rem;
+    width: 4.5rem;
+    font-size: 0.95rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .auto-cycle.dim {
+    opacity: 0.55;
   }
   .primary {
     background: var(--accent);
