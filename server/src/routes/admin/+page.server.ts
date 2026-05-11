@@ -9,6 +9,7 @@ export const load: PageServerLoad = async () => {
       id: schema.photos.id,
       uploaderLabel: schema.photos.uploaderLabel,
       source: schema.photos.source,
+      mime: schema.photos.mime,
       uploadedAt: schema.photos.uploadedAt,
       hiddenAt: schema.photos.hiddenAt,
       bytes: schema.photos.bytes,

@@ -280,11 +280,16 @@
         <tr class:hidden-row={p.hiddenAt}>
           <td>
             <a href="/api/photos/{p.id}/file?v=original" target="_blank" rel="noopener">
-              <img src="/api/photos/{p.id}/file?v=thumb" alt="" />
+              <span class="thumb-wrap">
+                <img src="/api/photos/{p.id}/file?v=thumb" alt="" />
+                {#if p.mime?.startsWith('video/')}
+                  <span class="play-badge" aria-hidden="true">▶</span>
+                {/if}
+              </span>
             </a>
           </td>
           <td>{p.uploaderLabel}</td>
-          <td>{p.source}</td>
+          <td>{p.source}{p.mime?.startsWith('video/') ? ' · video' : ''}</td>
           <td>{new Date(p.uploadedAt).toLocaleString()}</td>
           <td>{p.width}×{p.height} · {(p.bytes / 1024).toFixed(0)} KB</td>
           <td>{p.hiddenAt ? 'hidden' : 'visible'}</td>
@@ -549,6 +554,23 @@
     object-fit: cover;
     border-radius: 0.3rem;
     display: block;
+  }
+  .thumb-wrap {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+  }
+  .play-badge {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 1.4rem;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 0.3rem;
+    pointer-events: none;
   }
   .hidden-row {
     opacity: 0.5;

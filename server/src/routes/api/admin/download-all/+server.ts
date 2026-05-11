@@ -51,7 +51,10 @@ function extFromMime(mime: string): string {
     'image/heif': '.heif',
     'image/webp': '.webp',
     'image/avif': '.avif',
-    'image/tiff': '.tiff'
+    'image/tiff': '.tiff',
+    'video/mp4': '.mp4',
+    'video/quicktime': '.mov',
+    'video/webm': '.webm'
   };
   return map[mime] ?? '';
 }
